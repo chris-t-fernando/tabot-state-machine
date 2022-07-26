@@ -1,0 +1,91 @@
+SymbolData
+
+
+Symbol
+	YfSymbol str
+	AlpSymbol str
+	MinQuantityIncrement float
+	MinQuantity float
+	MinPriceIncrement float
+	Interval str
+
+PlayTemplate
+	StopLossTriggerPct float
+	StopLossHoldIntervals int
+	TakeProfitTriggerPct float
+	TakeProfitPct float
+	SignalStrength float
+
+PlayConfig
+	state_waiting state
+	state_entering_position state
+	state_taking_profit state
+	state_stopping_loss state
+	state_terminated state
+	buy_budget float
+	play_templates list
+
+PlayController
+	PlayId str
+	State str
+	PlayConfig PlayConfig
+
+PlayTelemetry
+	OriginalUnitStopLoss float
+	OriginalUnitTargetPrice float
+	BoughtTotalValue float
+	BoughtUnitCount int
+	SoldTotalValue float
+	SoldUnitCount int
+	InstanceCount int
+
+PlayInstance
+	PlaySubId str
+	Start datetime
+	End datetime
+	HeldTotalValue float
+	HeldUnitCount int
+	CurrentUnitStopLoss float
+	CurrentUnitTargetPrice float
+	BuyOrderId str
+	SaleOrders dict
+
+InstanceTelemetry
+	BoughtTotalValue float
+	BoughtUnitCount int
+	SoldTotalValue float
+	SoldUnitCount int
+
+
+StateWaiting
+	StateDescription str
+
+
+StateEnteringPosition
+	StateDescription str
+	OrderId str
+
+StateTakingProfit
+	StateDescription str
+	OrderId str
+
+StateStoppingLoss
+	StateDescription str
+	OrderId str
+
+StateTerminated
+	Reason str
+
+
+SymbolData {1}--{0..n} Symbol
+Symbol {1}--{0..n} PlayController
+PlayTemplate{0..n}--{0..n} PlayConfig
+PlayController {0..n}--{1} PlayConfig
+PlayController {1}--{0..n} PlayInstance
+PlayController {1}--{1} PlayTelemetry
+PlayInstance {1}--{1} StateWaiting
+PlayInstance {1}--{01} StateEnteringPosition
+PlayInstance {1}--{01} StateTakingProfit
+PlayInstance {1}--{01} StateStoppingLoss
+PlayInstance {1}--{01} StateTerminated
+PlayInstance {1}--{1} InstanceTelemetry
