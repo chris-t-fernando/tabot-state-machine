@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from symbol import Symbol
+from symbol.symbol import Symbol
 import uuid
 import logging
 
@@ -27,10 +27,10 @@ It is possible but unusual for a Strategy to extend the following abstracts (usu
 
 STATE_STAY = 0
 STATE_SPLIT = 1
-STATE_CHANGE = 2
+STATE_MOVE = 2
 
 
-class AState(ABC):
+class State(ABC):
     @abstractmethod
     def __init__(self, previous_state) -> None:
         log.debug(f"Started {self.__repr__()}")
@@ -51,37 +51,37 @@ class AState(ABC):
         return self.__class__.__name__
 
 
-class IStateWaiting(AState):
+class IStateWaiting(State):
     @abstractmethod
-    def __init__(self, previous_state: AState = None) -> None:
+    def __init__(self, previous_state: State = None) -> None:
         super().__init__(previous_state=previous_state)
 
 
-class IStateEnteringPosition(AState):
+class IStateEnteringPosition(State):
     @abstractmethod
-    def __init__(self, previous_state: AState) -> None:
+    def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
 
-class IStateTakingProfit(AState):
+class IStateTakingProfit(State):
     @abstractmethod
-    def __init__(self, previous_state: AState) -> None:
+    def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
 
-class IStateStoppingLoss(AState):
+class IStateStoppingLoss(State):
     @abstractmethod
-    def __init__(self, previous_state: AState) -> None:
+    def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
 
-class IStateTerminated(AState):
+class IStateTerminated(State):
     @abstractmethod
-    def __init__(self, previous_state: AState) -> None:
+    def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
 
-class AInstanceTelemetry(ABC):
+class InstanceTelemetry(ABC):
     def __init__(self, play_telemetry) -> None:
         self.bought_total_value = 0
         self.bought_unit_count = 0
@@ -90,7 +90,7 @@ class AInstanceTelemetry(ABC):
         self.play_telemetry = play_telemetry
 
 
-class APlayTelemetry(ABC):
+class ControllerTelemetry(ABC):
     def __init__(self) -> None:
         self.original_unit_stop_loss = 0
         self.original_unit_target_price = 0
@@ -101,7 +101,7 @@ class APlayTelemetry(ABC):
         self.instance_count = 0
 
 
-class APlayTemplate(ABC):
+class InstanceTemplate(ABC):
     def __init__(
         self,
         buy_signal_strength: float,
@@ -121,22 +121,22 @@ class APlayTemplate(ABC):
         self.buy_timeout_intervals = buy_timeout_intervals
 
 
-class APlayConfig(ABC):
-    state_waiting: AState = None
-    state_entering_position: AState = None
-    state_taking_profit: AState = None
-    state_stopping_loss: AState = None
-    state_terminated: AState = None
+class ControllerConfig(ABC):
+    state_waiting: State = None
+    state_entering_position: State = None
+    state_taking_profit: State = None
+    state_stopping_loss: State = None
+    state_terminated: State = None
     buy_budget: float = None
     play_templates: list = None
 
     def __init__(
         self,
-        state_waiting: AState,
-        state_entering_position: AState,
-        state_taking_profit: AState,
-        state_stopping_loss: AState,
-        state_terminated: AState,
+        state_waiting: State,
+        state_entering_position: State,
+        state_taking_profit: State,
+        state_stopping_loss: State,
+        state_terminated: State,
         buy_budget: float,
         play_templates: list,
     ) -> None:
@@ -149,13 +149,13 @@ class APlayConfig(ABC):
         self.play_templates = play_templates
 
 
-class APlayInstance(ABC):
+class Instance(ABC):
     def __init__(
-        self, template: APlayTemplate, play_controller, state=None, state_args=None
+        self, template: InstanceTemplate, play_controller, state=None, state_args=None
     ) -> None:
         self.config = template
         self.parent = play_controller
-        self.telemetry = AInstanceTelemetry(play_telemetry=play_controller.telemetry)
+        self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
 
         if state == None:
             self._state = play_controller.play_config.state_waiting()
@@ -163,12 +163,28 @@ class APlayInstance(ABC):
             self._state = state(**state_args)
 
     def run(self):
-        exit_met, new_state = self._state.check_exit()
-        if not exit_met:
-            log.log(9, "no change")
+        # new_state_args is a dict of args to be handed to new_state on instantiation
+        instance_action, new_state, new_state_args = self._state.check_exit()
+        if instance_action == STATE_STAY:
+            log.log(9, "STATE_STAY")
             return
+        elif instance_action == STATE_MOVE:
+            log.log(10, "STATE_MOVE from {self.state} to {new_state}")
+            self.state = new_state
+            return
+        elif instance_action == STATE_SPLIT:
+            log.log(10, "STATE_SPLIT")
+            # to split means to leave this instance where it is, and spawn a new instance at
+            # whatever the next state is
+            # for example, a partial fill on a limit buy. in that case, the existing instance would continue on until 100% fill or cancel
+            # but a new instance would be spawned to handle the partially filled units
+            # to do that, it needs to know how many got filled
+            # and it needs a copy of the order so it knows details like order type, filled price etc
+            # TODO which instance owns the fees?
+            self.parent.fork_instance(self, new_state, **new_state_args)
 
-        self.state = new_state
+        else:
+            raise NotImplementedError("This should never happen...")
 
     @property
     def state(self):
@@ -188,12 +204,12 @@ class APlayInstance(ABC):
         log.info(f"successfully set new state to {self._state}")
 
 
-class APlayController(ABC):
+class InstanceController(ABC):
     def __init__(
         self,
         symbol: Symbol,
-        play_config: APlayConfig,
-        play_instance_class: APlayInstance = APlayInstance,
+        play_config: ControllerConfig,
+        play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
         self.play_config = play_config
@@ -201,7 +217,7 @@ class APlayController(ABC):
         # PlayInstance class to be use
         self.play_instance_class = play_instance_class
         self.instances = []
-        self.telemetry = APlayTelemetry()
+        self.telemetry = ControllerTelemetry()
 
     def start_play(self):
         if len(self.instances) > 0:
@@ -221,6 +237,14 @@ class APlayController(ABC):
     def run(self):
         for i in self.instances:
             i.run()
+
+    def fork_instance(self, instance: Instance, new_state: State, **kwargs):
+        kwargs["previous_state"] = instance.state
+        self.instances.append(
+            self.play_instance_class(
+                template=instance.config, play_controller=self, state=new_state, state_args=kwargs
+            )
+        )
 
 
 # TODO

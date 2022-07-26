@@ -1,4 +1,4 @@
-from symbol_data import SymbolData
+from symbol.symbol_data import SymbolData
 import logging
 
 log = logging.getLogger(__name__)

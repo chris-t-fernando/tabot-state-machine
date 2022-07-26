@@ -1,11 +1,11 @@
-from strategy_macd import (
+from strategies.macd import (
     MacdStateEnteringPosition,
     MacdStateStoppingLoss,
     MacdStateTakingProfit,
     MacdStateWaiting,
     MacdStateTerminated,
 )
-from abstracts import APlayTemplate, APlayConfig, APlayController, Symbol
+from core.abstracts import InstanceTemplate, ControllerConfig, InstanceController, Symbol
 import logging
 
 logger = logging.getLogger()
@@ -22,16 +22,7 @@ logging.getLogger("symbol_data").setLevel(logging.DEBUG)
 logging.getLogger("strategy_machine").setLevel(logging.DEBUG)
 logging.getLogger("strategy_macd").setLevel(logging.DEBUG)
 
-# config = MacdPlayConfig()
-# machine = MacdPlayInstance(config)
-# machine.run()
-# machine.run()
-# machine.run()
-# machine.run()
-# machine.run()
-# machine.run()
-
-play_template_1 = APlayTemplate(
+play_template_1 = InstanceTemplate(
     buy_signal_strength=1,
     take_profit_trigger_pct_of_risk=1,
     take_profit_pct_to_sell=1,
@@ -40,7 +31,7 @@ play_template_1 = APlayTemplate(
     stop_loss_hold_intervals=1,
 )
 
-play_template_2 = APlayTemplate(
+play_template_2 = InstanceTemplate(
     buy_signal_strength=0.9,
     take_profit_trigger_pct_of_risk=0.9,
     take_profit_pct_to_sell=0.9,
@@ -50,7 +41,7 @@ play_template_2 = APlayTemplate(
 )
 
 
-play_config = APlayConfig(
+play_config = ControllerConfig(
     state_waiting=MacdStateWaiting,
     state_entering_position=MacdStateEnteringPosition,
     state_taking_profit=MacdStateTakingProfit,
@@ -66,7 +57,7 @@ symbol = Symbol(
 )  # need to do api calls to generate increments etc
 
 
-controller = APlayController(symbol, play_config)  # also creates a play telemetry object
+controller = InstanceController(symbol, play_config)  # also creates a play telemetry object
 controller.start_play()
 controller.run()
 controller.run()
