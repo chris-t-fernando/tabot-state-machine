@@ -19,7 +19,7 @@ class MacdStateWaiting(IStateWaiting):
         super().__init__(previous_state=previous_state)
         log.log(9, f"Finished initialising {self}")
 
-    def check_exit(self):
+    def check_exit(self, parent_instance):
         log.log(9, f"checking exit on {self}")
         return STATE_MOVE, MacdStateEnteringPosition, {}
 
@@ -32,7 +32,7 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
     def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
-    def check_exit(self):
+    def check_exit(self, parent_instance):
         log.log(9, f"checking exit on {self}")
         return STATE_MOVE, MacdStateTakingProfit, {}
 
@@ -45,7 +45,7 @@ class MacdStateTakingProfit(IStateTakingProfit):
     def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
-    def check_exit(self):
+    def check_exit(self, parent_instance):
         log.log(9, f"checking exit on {self}")
         return STATE_MOVE, MacdStateStoppingLoss, {}
 
@@ -58,7 +58,7 @@ class MacdStateStoppingLoss(IStateStoppingLoss):
     def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
-    def check_exit(self):
+    def check_exit(self, parent_instance):
         log.log(9, f"checking exit on {self}")
         return STATE_MOVE, MacdStateWaiting, {}
 
@@ -71,7 +71,7 @@ class MacdStateTerminated(IStateTerminated):
     def __init__(self, previous_state: State) -> None:
         super().__init__(previous_state=previous_state)
 
-    def check_exit(self):
+    def check_exit(self, parent_instance):
         log.log(9, f"checking exit on {self}")
         return STATE_STAY, None, {}
 

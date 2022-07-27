@@ -154,7 +154,7 @@ class Instance(ABC):
         self, template: InstanceTemplate, play_controller, state=None, state_args=None
     ) -> None:
         self.config = template
-        self.parent = play_controller
+        self.parent_controller = play_controller
         self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
 
         if state == None:
@@ -164,7 +164,7 @@ class Instance(ABC):
 
     def run(self):
         # new_state_args is a dict of args to be handed to new_state on instantiation
-        instance_action, new_state, new_state_args = self._state.check_exit()
+        instance_action, new_state, new_state_args = self._state.check_exit(self)
         if instance_action == STATE_STAY:
             log.log(9, "STATE_STAY")
             return
@@ -180,8 +180,10 @@ class Instance(ABC):
             # but a new instance would be spawned to handle the partially filled units
             # to do that, it needs to know how many got filled
             # and it needs a copy of the order so it knows details like order type, filled price etc
+            # new instance is instantiated using fill information from broker api, gets a new sub-identifier and gets a new telemetry object
+            # new instance continues on
             # TODO which instance owns the fees?
-            self.parent.fork_instance(self, new_state, **new_state_args)
+            self.parent_controller.fork_instance(self, new_state, **new_state_args)
 
         else:
             raise NotImplementedError("This should never happen...")
@@ -214,7 +216,7 @@ class InstanceController(ABC):
         self.symbol = symbol
         self.play_config = play_config
         self.play_id = self._generate_play_id()
-        # PlayInstance class to be use
+        # PlayInstance class to be use - can be overridden to enable extension
         self.play_instance_class = play_instance_class
         self.instances = []
         self.telemetry = ControllerTelemetry()
@@ -248,13 +250,7 @@ class InstanceController(ABC):
 
 
 # TODO
-# be able to do a split
-# instance play changes implementations
+# instance play changes implementations                 ?????
+# create instance telemetry methods
+# create play telemetry methods
 # hook up play and instance telemetry callbacks
-
-# if there is a split, what happens?
-# during buy:
-# start a new instance at partial fill
-# original instance continues on until its totally full
-# new instance is instantiated using fill information from broker api, gets a new sub-identifier and gets a new telemetry object
-# new instance continues on
