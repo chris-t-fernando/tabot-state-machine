@@ -83,7 +83,7 @@ class MacdStateWaiting(IStateWaiting):
         macd_negative = False
         sma_trending_up = False
 
-        df = self.parent_instance.symbol_ohlc.get_range()
+        df = self.ohlc.get_range()
 
         row = df.iloc[-1]
 
@@ -105,32 +105,18 @@ class MacdStateWaiting(IStateWaiting):
             last_sma=last_sma, recent_average_sma=recent_average_sma
         )
 
-        if sma_trending_up:
-            log.debug("SMA is upward")
-        else:
-            log.debug("SMA not trending upward")
-
-        # only bother writing to telemetry if we find a signal crossover - otherwise there's too much noise
-        if row.macd_crossover:
-            # string summary of what we found
-            if crossover and macd_negative and sma_trending_up:
-                outcome = "buy signal found"
-            else:
-                outcome = "no signal"
-
         # if crossover and macd_negative and sma_trending_up:
         if crossover and macd_negative:
             # all conditions met for a buy
-            log.debug(
+            log.info(
                 f"{self.symbol_str}: FOUND BUY SIGNAL NO SMA AT {df.index[-1]} (MACD {round(row.macd_macd,4)} vs "
                 f"signal {round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)})"
             )
-            return True
+            return STATE_MOVE, MacdStateEnteringPosition, {}
 
         log.debug(
             f"{self.symbol_str}: No buy signal at {df.index[-1]} (MACD {round(row.macd_macd,4)} vs signal {round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)}"
         )
-
         return STATE_STAY, None, {}
 
     def do_exit(self):
@@ -138,22 +124,21 @@ class MacdStateWaiting(IStateWaiting):
         return
 
     def get_last_sma(df):
-        return df.iloc[-1].sma_200
+        return df.iloc[-1].sma
 
     def get_recent_average_sma(df):
-        # return df.sma_200.rolling(window=20, min_periods=20).mean().iloc[-1]
-        return df.sma_200.iloc[-20]
+        return df.sma.iloc[-20]
 
     def check_sma(last_sma: float, recent_average_sma: float, ignore_sma: bool = False):
         if ignore_sma:
-            log.warning(f"Returning True since ignore_sma = {ignore_sma}")
+            log.warning(f"Returning True since ignore_sma is enabled")
             return True
 
         if last_sma > recent_average_sma:
-            # log_wp.debug(f"True last SMA {last_sma} > {recent_average_sma}")
+            log.log(9, f"True, last SMA {last_sma} > {recent_average_sma}")
             return True
         else:
-            # log_wp.debug(f"False last SMA {last_sma} > {recent_average_sma}")
+            log.log(9, f"False, last SMA {last_sma} > {recent_average_sma}")
             return False
 
 

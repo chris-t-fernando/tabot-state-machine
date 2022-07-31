@@ -20,7 +20,7 @@ class Symbol:
         self.min_quantity = min_quantity
         self.min_price_increment = min_price_increment
         self.interval = interval
-        self.ohlc_data = SymbolData(yf_symbol=yf_symbol, interval=interval)
+        self.ohlc = SymbolData(yf_symbol=yf_symbol, interval=interval)
 
     def __repr__(self) -> str:
         return self.yf_symbol

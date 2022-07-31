@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from symbol.symbol import Symbol
+from symbol.symbol_data import SymbolData
 import uuid
 import logging
 
@@ -37,8 +38,16 @@ class State(ABC):
         self.previous_state = previous_state
         self.parent_instance = parent_instance
         self.symbol = parent_instance.symbol
-        self.symbol_ohlc = parent_instance.symbol_ohlc
+        # self.ohlc = parent_instance.ohlc
         self.symbol_str = parent_instance.symbol_str
+
+    @property
+    def ohlc(self) -> SymbolData:
+        return self.parent_instance.ohlc
+
+    # @ohlc.setter
+    # def ohlc(self, ohlc_source):
+    #    self.ohlc = ohlc_source
 
     @abstractmethod
     def check_exit(self):
@@ -160,7 +169,7 @@ class Instance(ABC):
         self.config = template
         self.parent_controller = play_controller
         self.symbol = play_controller.symbol
-        self.symbol_ohlc = play_controller.symbol.ohlc_data
+        self.ohlc = play_controller.symbol.ohlc
         self.symbol_str = play_controller.symbol.yf_symbol
         self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
 

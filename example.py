@@ -58,10 +58,10 @@ symbol = Symbol(
     yf_symbol="BTC-USD", alp_symbol="BTCUSD"
 )  # need to do api calls to generate increments etc
 
-symbol.ohlc_data.apply_ta(btalib.sma)
+symbol.ohlc.apply_ta(btalib.sma)
 # symbol.ohlc_data.apply_ta(btalib.macd)
-symbol.ohlc_data.apply_ta(MacdTa.macd)
-symbol.ohlc_data.get_latest()
+symbol.ohlc.apply_ta(MacdTa.macd)
+symbol.ohlc.get_latest()
 
 # TODO why isn't caching not invalidated and why is ta data not combined with bars?
 

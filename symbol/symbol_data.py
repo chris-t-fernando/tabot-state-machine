@@ -60,7 +60,7 @@ class SymbolData:
             log.error(error_message)
             raise SymbolError(error_message)
 
-    def get_interval_settings(interval):
+    def get_interval_settings(interval: str) -> tuple:
         minutes_intervals = ["1m", "2m", "5m", "15m", "30m", "60m", "90m"]
         max_period = {
             "1m": 6,
@@ -70,12 +70,6 @@ class SymbolData:
             "30m": 59,
             "60m": 500,
             "90m": 59,
-            "1h": 500,
-            "1d": 2000,
-            "5d": 500,
-            "1wk": 500,
-            "1mo": 500,
-            "3mo": 500,
         }
 
         if interval in minutes_intervals:
@@ -86,10 +80,10 @@ class SymbolData:
         else:
             raise ValueError("I can't be bothered implementing intervals longer than 90m")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.yf_symbol
 
-    def _validate_minute(self, minute):
+    def _validate_minute(self, minute: int) -> bool:
         if self.interval == "1m":
             return True
         elif self.interval == "2m":
@@ -118,7 +112,7 @@ class SymbolData:
         start_date = start_date.replace(microsecond=0)
         return start_date
 
-    def refresh_cache(self, start: pd.Timestamp = None, end: pd.Timestamp = None):
+    def refresh_cache(self, start: pd.Timestamp = None, end: pd.Timestamp = None) -> None:
         cache_miss = False
         initialising = False
 
@@ -207,20 +201,20 @@ class SymbolData:
             new_timeout = datetime.now() + timeout_window
             self.refresh_timeout = new_timeout
         else:
-            log.debug(f"No cache miss")
+            log.log(9, f"No cache miss")
 
-    def get_interval_integer(interval):
+    def get_interval_integer(interval: str) -> int:
         if interval in ["1m", "2m", "5m", "15m", "30m"]:
             return int(interval[:-1])
 
         raise ValueError("I can't be bothered implementing intervals longer than 30m")
 
-    def get_interval_in_seconds(interval):
+    def get_interval_in_seconds(interval: str) -> int:
         interval_int = SymbolData.get_interval_integer(interval)
         seconds = interval_int * 60
         return seconds
 
-    def get_pause(interval):
+    def get_pause(interval: str) -> int:
         interval_seconds = SymbolData.get_interval_in_seconds(interval)
 
         # get current time
@@ -236,7 +230,7 @@ class SymbolData:
             pause += 90
         return pause
 
-    def apply_ta(self, ta_function, start=None, end=None):
+    def apply_ta(self, ta_function, start: pd.Timestamp = None, end: pd.Timestamp = None):
         key_name = str(ta_function)
         # new ta function
         if not str(ta_function) in self.ta_data:
@@ -276,7 +270,7 @@ class SymbolData:
         # self.bars = self.source_bars.combine_first(self.ta_data[key_name])
         self.bars = self.bars.combine_first(self.ta_data[key_name])
 
-    def _reapply_btalib(self, start=None, end=None):
+    def _reapply_btalib(self, start: pd.Timestamp = None, end: pd.Timestamp = None):
         if not start:
             start = self.bars.index[0]
         if not end:
@@ -292,19 +286,19 @@ class SymbolData:
         return self.bars.iloc[0]
 
     @Decorators.refresh_bars
-    def get_range(self, start: pd.Timestamp = None, end: pd.Timestamp = None, refresh=False):
+    def get_range(self, start: pd.Timestamp = None, end: pd.Timestamp = None):
         return self.bars.loc[start:end]
 
     @Decorators.refresh_bars
-    def get_latest(self, refresh=False):
+    def get_latest(self):
         return self.bars.iloc[-1]
 
     @Decorators.refresh_bars
-    def in_bars(self, timestamp, refresh=False):
+    def in_bars(self, timestamp: pd.Timestamp):
         return timestamp in self.bars
 
 
-def round_time(date: pd.Timestamp, interval_minutes):
+def round_time(date: pd.Timestamp, interval_minutes: int):
     minutes = (date.minute % interval_minutes) * 60
     seconds = date.second
     total_seconds = minutes + seconds
@@ -324,3 +318,12 @@ def round_time(date: pd.Timestamp, interval_minutes):
     rounded_date = date + delta
     # log_wp.debug(f"Rounded {date} to {rounded_date}")
     return rounded_date
+
+
+# TODO you need to solve for backtesting
+# i think if you make a new class that inherits from SymbolData
+# and overrides get_pause so the cache never invalidates
+# and add a method to set the 'current' date and time
+# and override the query methods, where you run super() then trim anything after the 'current' date and time
+# finally, the logic in Symbol will need to be updated to be aware of backtesting, and which object to use
+# of maybe inject it?
