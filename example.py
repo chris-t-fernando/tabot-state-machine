@@ -4,8 +4,10 @@ from strategies.macd import (
     MacdStateTakingProfit,
     MacdStateWaiting,
     MacdStateTerminated,
+    MacdTa,
 )
 from core.abstracts import InstanceTemplate, ControllerConfig, InstanceController, Symbol
+import btalib
 import logging
 
 logger = logging.getLogger()
@@ -18,9 +20,9 @@ logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
 logging.getLogger(__name__).setLevel(logging.DEBUG)
-logging.getLogger("symbol_data").setLevel(logging.DEBUG)
-logging.getLogger("strategy_machine").setLevel(logging.DEBUG)
-logging.getLogger("strategy_macd").setLevel(logging.DEBUG)
+logging.getLogger("symbol.symbol_data").setLevel(logging.DEBUG)
+logging.getLogger("core.abstracts").setLevel(logging.DEBUG)
+logging.getLogger("strategies.macd").setLevel(logging.DEBUG)
 
 play_template_1 = InstanceTemplate(
     buy_signal_strength=1,
@@ -56,6 +58,12 @@ symbol = Symbol(
     yf_symbol="BTC-USD", alp_symbol="BTCUSD"
 )  # need to do api calls to generate increments etc
 
+symbol.ohlc_data.apply_ta(btalib.sma)
+# symbol.ohlc_data.apply_ta(btalib.macd)
+symbol.ohlc_data.apply_ta(MacdTa.macd)
+symbol.ohlc_data.get_latest()
+
+# TODO why isn't caching not invalidated and why is ta data not combined with bars?
 
 controller = InstanceController(symbol, play_config)  # also creates a play telemetry object
 controller.start_play()

@@ -32,17 +32,21 @@ STATE_MOVE = 2
 
 class State(ABC):
     @abstractmethod
-    def __init__(self, previous_state) -> None:
+    def __init__(self, parent_instance, previous_state) -> None:
         log.debug(f"Started {self.__repr__()}")
         self.previous_state = previous_state
+        self.parent_instance = parent_instance
+        self.symbol = parent_instance.symbol
+        self.symbol_ohlc = parent_instance.symbol_ohlc
+        self.symbol_str = parent_instance.symbol_str
 
     @abstractmethod
     def check_exit(self):
-        ...
+        log.debug(f"Started check_exit on {self.__repr__()}")
 
     @abstractmethod
     def do_exit(self):
-        ...
+        log.debug(f"Started do_exit on {self.__repr__()}")
 
     def __del__(self):
         log.log(9, f"Deleting {self.__repr__()}")
@@ -53,32 +57,32 @@ class State(ABC):
 
 class IStateWaiting(State):
     @abstractmethod
-    def __init__(self, previous_state: State = None) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, parent_instance, previous_state: State = None) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateEnteringPosition(State):
     @abstractmethod
-    def __init__(self, previous_state: State) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, parent_instance, previous_state: State) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateTakingProfit(State):
     @abstractmethod
-    def __init__(self, previous_state: State) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, parent_instance, previous_state: State) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateStoppingLoss(State):
     @abstractmethod
-    def __init__(self, previous_state: State) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, parent_instance, previous_state: State) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateTerminated(State):
     @abstractmethod
-    def __init__(self, previous_state: State) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, parent_instance, previous_state: State) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class InstanceTelemetry(ABC):
@@ -155,18 +159,21 @@ class Instance(ABC):
     ) -> None:
         self.config = template
         self.parent_controller = play_controller
+        self.symbol = play_controller.symbol
+        self.symbol_ohlc = play_controller.symbol.ohlc_data
+        self.symbol_str = play_controller.symbol.yf_symbol
         self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
 
         if state == None:
-            self._state = play_controller.play_config.state_waiting()
+            self._state = play_controller.play_config.state_waiting(parent_instance=self)
         else:
             self._state = state(**state_args)
 
     def run(self):
         # new_state_args is a dict of args to be handed to new_state on instantiation
-        instance_action, new_state, new_state_args = self._state.check_exit(self)
+        instance_action, new_state, new_state_args = self._state.check_exit()
         if instance_action == STATE_STAY:
-            log.log(9, "STATE_STAY")
+            log.log(10, "STATE_STAY")
             return
         elif instance_action == STATE_MOVE:
             log.log(10, "STATE_MOVE from {self.state} to {new_state}")

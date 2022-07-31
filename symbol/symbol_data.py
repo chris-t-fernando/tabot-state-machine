@@ -5,6 +5,9 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
 import pytz
+import warnings
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +23,7 @@ class SymbolError(Exception):
 class SymbolData:
     yf_symbol: str
     interval: str
+    source_bars: pd.DataFrame
     bars: pd.DataFrame
     registered_ta_functions: set
     ta_data: dict
@@ -32,8 +36,8 @@ class SymbolData:
         @classmethod
         def refresh_bars(cls, decorated):
             def inner(*args, **kwargs):
-                if kwargs.get("refresh"):
-                    args[0].refresh_cache()
+                # if kwargs.get("refresh"):
+                args[0].refresh_cache()
                 return decorated(*args, **kwargs)
 
             return inner
@@ -50,7 +54,7 @@ class SymbolData:
 
         self.refresh_cache()
 
-        if len(self.bars) == 0:
+        if len(self.source_bars) == 0:
             # invalid ticker
             error_message = f"Invalid symbol specified, bailing"
             log.error(error_message)
@@ -118,7 +122,7 @@ class SymbolData:
         cache_miss = False
         initialising = False
 
-        if not hasattr(self, "bars") or len(self.bars) == 0:
+        if not hasattr(self, "bars") or len(self.source_bars) == 0:
             cache_miss = True
             initialising = True
             log.debug(f"Cache miss - bars len 0")
@@ -129,20 +133,21 @@ class SymbolData:
 
             yf_start = rounded_start
 
+            self.source_bars = pd.DataFrame()
             self.bars = pd.DataFrame()
 
         # has a bars attribute so its safe to inspect it
         else:
-            yf_start = self.bars.index[-1]
+            yf_start = self.source_bars.index[-1]
             if start == None:
-                rounded_start = self.bars.index[0]
+                rounded_start = self.source_bars.index[0]
             else:
                 rounded_start = round_time(start, self.interval_minutes)
-                if rounded_start < self.bars.index[0]:
+                if rounded_start < self.source_bars.index[0]:
                     yf_start = rounded_start
                     cache_miss = True
                     log.debug(f"Cache miss - start earlier than bars")
-                elif rounded_start > self.bars.index[-1]:
+                elif rounded_start > self.source_bars.index[-1]:
                     cache_miss = True
                     log.debug(f"Cache miss - start later than bars")
 
@@ -150,7 +155,7 @@ class SymbolData:
                 rounded_end = round_time(self._make_now(), self.interval_minutes)
             else:
                 rounded_end = round_time(end, self.interval_minutes)
-            if rounded_end > self.bars.index[-1]:
+            if rounded_end > self.source_bars.index[-1]:
                 cache_miss = True
                 log.debug(f"Cache miss - end later than bars")
 
@@ -180,20 +185,20 @@ class SymbolData:
                 new_bars = new_bars.iloc[:-1]
 
             if not initialising:
-                old_rows = len(self.bars)
-                old_start = self.bars.index[0]
-                old_finish = self.bars.index[-1]
+                old_rows = len(self.source_bars)
+                old_start = self.source_bars.index[0]
+                old_finish = self.source_bars.index[-1]
 
-            self.bars = self.merge_bars(self.bars, new_bars)
+            self.source_bars = self.merge_bars(self.source_bars, new_bars)
 
             if not initialising:
                 log.debug(
-                    f"  - merged {old_rows:,} old bars with {len(new_bars):,} new bars, new length is {len(self.bars):,}"
+                    f"  - merged {old_rows:,} old bars with {len(new_bars):,} new bars, new length is {len(self.source_bars):,}"
                 )
-                if self.bars.index[0] != old_start:
-                    log.debug(f"  - new start is {self.bars.index[0]} vs old {old_start}")
-                if self.bars.index[-1] != old_finish:
-                    log.debug(f"  - new finish is {self.bars.index[-1]} vs old {old_finish}")
+                if self.source_bars.index[0] != old_start:
+                    log.debug(f"  - new start is {self.source_bars.index[0]} vs old {old_start}")
+                if self.source_bars.index[-1] != old_finish:
+                    log.debug(f"  - new finish is {self.source_bars.index[-1]} vs old {old_finish}")
 
             self._reapply_btalib(start=new_bars.index[0], end=new_bars.index[-1])
 
@@ -201,6 +206,8 @@ class SymbolData:
             timeout_window = relativedelta(seconds=timeout_seconds)
             new_timeout = datetime.now() + timeout_window
             self.refresh_timeout = new_timeout
+        else:
+            log.debug(f"No cache miss")
 
     def get_interval_integer(interval):
         if interval in ["1m", "2m", "5m", "15m", "30m"]:
@@ -229,33 +236,33 @@ class SymbolData:
             pause += 90
         return pause
 
-    def apply_btalib(self, btalib_function, start=None, end=None):
-        key_name = str(btalib_function)
+    def apply_ta(self, ta_function, start=None, end=None):
+        key_name = str(ta_function)
         # new ta function
-        if not str(btalib_function) in self.ta_data:
+        if not str(ta_function) in self.ta_data:
             # register this ta function - so it gets refreshed next time there is a cache miss
-            self.ta_data[key_name] = btalib_function(self.bars).df
-            self.registered_ta_functions.add(btalib_function)
+            self.ta_data[key_name] = ta_function(self.source_bars).df
+            self.registered_ta_functions.add(ta_function)
 
         else:
             # existing ta function, so just refresh what's changed
             # start by grabbing the new rows, plus a buffer of 100 previous rows
             # get the index 100 rows earlier
 
-            start_loc = self.bars.index.get_loc(start)
+            start_loc = self.source_bars.index.get_loc(start)
             padding = 100
             if start_loc < padding:
-                padding_start = self.bars.index[0]
+                padding_start = self.source_bars.index[0]
             else:
-                padding_start = self.bars.index[start_loc - padding]
+                padding_start = self.source_bars.index[start_loc - padding]
 
             # can't just use slice because get a weird error about comparing different timezones
             # ta_data_input = self.bars.loc[padding_start:end]
-            ta_data_input = self.bars.loc[
-                (self.bars.index >= padding_start) & (self.bars.index <= end)
+            ta_data_input = self.source_bars.loc[
+                (self.source_bars.index >= padding_start) & (self.source_bars.index <= end)
             ]
 
-            ta_data_output = btalib_function(ta_data_input).df
+            ta_data_output = ta_function(ta_data_input).df
 
             # NOT NEEDED - the xor gets rid of this
             # get rid of the padding
@@ -264,7 +271,10 @@ class SymbolData:
             dest_df = self.ta_data[key_name]
 
             self.ta_data[key_name] = self.merge_bars(dest_df, ta_data_output)
-            # pd.concat([dest_df, ta_data_output[~ta_data_output.index.isin(dest_df.index)]]).sort_index()
+
+        # self.bars = self.source_bars.join(self.ta_data[key_name])
+        # self.bars = self.source_bars.combine_first(self.ta_data[key_name])
+        self.bars = self.bars.combine_first(self.ta_data[key_name])
 
     def _reapply_btalib(self, start=None, end=None):
         if not start:
@@ -272,14 +282,17 @@ class SymbolData:
         if not end:
             end = self.bars.index[-1]
 
+        # do this to make sure that .bars has the same number of rows as source_bars. the next block will add in the btalib columns anyway
+        self.bars = self.source_bars.copy()
+
         for btalib_function in self.registered_ta_functions:
-            self.apply_btalib(btalib_function, start, end)
+            self.apply_ta(btalib_function, start, end)
 
     def get_first(self):
         return self.bars.iloc[0]
 
     @Decorators.refresh_bars
-    def get_range(self, start: pd.Timestamp = None, end: pd.Timestamp = None):
+    def get_range(self, start: pd.Timestamp = None, end: pd.Timestamp = None, refresh=False):
         return self.bars.loc[start:end]
 
     @Decorators.refresh_bars
