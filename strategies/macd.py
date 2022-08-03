@@ -23,7 +23,7 @@ from time import sleep
 log = logging.getLogger(__name__)
 
 
-class MacdTa:
+class MacdTA:
     class MacdColumns:
         df: pd.DataFrame
 
@@ -70,7 +70,7 @@ class MacdTa:
         # crossover happens when MA12 crosses over MA26
         df["macd_crossover"] = df.macd_above_signal.ne(df.macd_above_signal.shift())
 
-        return MacdTa.MacdColumns(df)
+        return MacdTA.MacdColumns(df)
 
 
 class MacdStateWaiting(IStateWaiting):
@@ -143,7 +143,7 @@ class MacdStateWaiting(IStateWaiting):
 
 
 class MacdStateEnteringPosition(IStateEnteringPosition):
-    def __init__(self, parent_instance: Instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
@@ -156,7 +156,7 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
 
 
 class MacdStateTakingProfit(IStateTakingProfit):
-    def __init__(self, parent_instance: Instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
@@ -169,12 +169,12 @@ class MacdStateTakingProfit(IStateTakingProfit):
 
 
 class MacdStateStoppingLoss(IStateStoppingLoss):
-    def __init__(self, parent_instance: Instance, previous_state: State) -> None:
-        super().__init__(previous_state=previous_state)
+    def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
+        super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return STATE_MOVE, MacdStateWaiting, {}
+        return STATE_MOVE, MacdStateTerminated, {}
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
@@ -182,7 +182,7 @@ class MacdStateStoppingLoss(IStateStoppingLoss):
 
 
 class MacdStateTerminated(IStateTerminated):
-    def __init__(self, parent_instance: Instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):

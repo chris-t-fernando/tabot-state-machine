@@ -4,7 +4,7 @@ from strategies.macd import (
     MacdStateTakingProfit,
     MacdStateWaiting,
     MacdStateTerminated,
-    MacdTa,
+    MacdTA,
 )
 from core.abstracts import InstanceTemplate, ControllerConfig, InstanceController, Symbol
 import btalib
@@ -20,7 +20,7 @@ logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
 logging.getLogger(__name__).setLevel(logging.DEBUG)
-logging.getLogger("symbol.symbol_data").setLevel(logging.DEBUG)
+logging.getLogger("symbol.symbol_data").setLevel(logging.WARNING)
 logging.getLogger("core.abstracts").setLevel(logging.DEBUG)
 logging.getLogger("strategies.macd").setLevel(logging.DEBUG)
 
@@ -55,24 +55,28 @@ play_config = ControllerConfig(
 
 
 symbol = Symbol(
-    yf_symbol="BTC-USD", alp_symbol="BTCUSD"
+    yf_symbol="BTC-USD", alp_symbol="BTCUSD", back_testing=True
 )  # need to do api calls to generate increments etc
 
 symbol.ohlc.apply_ta(btalib.sma)
-# symbol.ohlc_data.apply_ta(btalib.macd)
-symbol.ohlc.apply_ta(MacdTa.macd)
-symbol.ohlc.get_latest()
+symbol.ohlc.apply_ta(MacdTA.macd)
 
-# TODO why isn't caching not invalidated and why is ta data not combined with bars?
+current_interval_key = 3500
+current_interval = symbol.ohlc.bars.index[current_interval_key]
+bar_len = len(symbol.ohlc.bars)
+
+symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
 
 controller = InstanceController(symbol, play_config)  # also creates a play telemetry object
 controller.start_play()
-controller.run()
-controller.run()
-controller.run()
-controller.run()
-controller.run()
 
+while current_interval_key <= bar_len:
+    logger.debug(f"Checking {current_interval}")
+    controller.run()
+
+    current_interval_key += 1
+    current_interval = symbol.ohlc.bars.index[current_interval_key]
+    symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
 
 # so who decides the wait period?
 # InstanceController? but then how do multiple symbols run in parallel

@@ -33,13 +33,19 @@ STATE_MOVE = 2
 
 class State(ABC):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state) -> None:
+    def __init__(self, previous_state, parent_instance=None) -> None:
         log.debug(f"Started {self.__repr__()}")
         self.previous_state = previous_state
-        self.parent_instance = parent_instance
-        self.symbol = parent_instance.symbol
+        if not parent_instance:
+            self.parent_instance = previous_state.parent_instance
+            self.symbol = previous_state.parent_instance.symbol
+            self.symbol_str = previous_state.parent_instance.symbol_str
+        else:
+            self.parent_instance = parent_instance
+            self.symbol = parent_instance.symbol
+            self.symbol_str = parent_instance.symbol_str
+
         # self.ohlc = parent_instance.ohlc
-        self.symbol_str = parent_instance.symbol_str
 
     @property
     def ohlc(self) -> SymbolData:
@@ -66,31 +72,36 @@ class State(ABC):
 
 class IStateWaiting(State):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state: State = None) -> None:
+    # def __init__(self, parent_instance, previous_state: State = None) -> None:
+    def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateEnteringPosition(State):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state: State) -> None:
+    # def __init__(self, parent_instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateTakingProfit(State):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state: State) -> None:
+    # def __init__(self, parent_instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateStoppingLoss(State):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state: State) -> None:
+    # def __init__(self, parent_instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateTerminated(State):
     @abstractmethod
-    def __init__(self, parent_instance, previous_state: State) -> None:
+    # def __init__(self, parent_instance, previous_state: State) -> None:
+    def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
@@ -182,14 +193,14 @@ class Instance(ABC):
         # new_state_args is a dict of args to be handed to new_state on instantiation
         instance_action, new_state, new_state_args = self._state.check_exit()
         if instance_action == STATE_STAY:
-            log.log(10, "STATE_STAY")
+            log.log(9, "STATE_STAY")
             return
         elif instance_action == STATE_MOVE:
-            log.log(10, "STATE_MOVE from {self.state} to {new_state}")
+            log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
             self.state = new_state
             return
         elif instance_action == STATE_SPLIT:
-            log.log(10, "STATE_SPLIT")
+            log.log(9, "STATE_SPLIT")
             # to split means to leave this instance where it is, and spawn a new instance at
             # whatever the next state is
             # for example, a partial fill on a limit buy. in that case, the existing instance would continue on until 100% fill or cancel
@@ -216,10 +227,10 @@ class Instance(ABC):
             raise RuntimeError(_msg)
 
         self._state.do_exit()
-        log.info(f"do_exit() successful on {self._state}")
+        log.log(9, f"do_exit() successful on {self._state}")
 
         self._state = new_state(previous_state=self._state)
-        log.info(f"successfully set new state to {self._state}")
+        log.log(9, f"successfully set new state to {self._state}")
 
 
 class InstanceController(ABC):
@@ -235,6 +246,7 @@ class InstanceController(ABC):
         # PlayInstance class to be use - can be overridden to enable extension
         self.play_instance_class = play_instance_class
         self.instances = []
+        self.terminated_instances = []
         self.telemetry = ControllerTelemetry()
 
     def start_play(self):
@@ -253,8 +265,20 @@ class InstanceController(ABC):
         return "play-" + self.symbol.yf_symbol + uuid.uuid4().hex[:length].upper()
 
     def run(self):
+        new_instances = []
+        retained_instances = []
         for i in self.instances:
             i.run()
+
+            if isinstance(i.state, IStateTerminated):
+                # if this instance is terminated, spin up a new one
+                self.terminated_instances.append(i)
+                new_instances.append(self.play_instance_class(i.config, self))
+            else:
+                retained_instances.append(i)
+
+        updated_instances = new_instances + retained_instances
+        self.instances = updated_instances
 
     def fork_instance(self, instance: Instance, new_state: State, **kwargs):
         kwargs["previous_state"] = instance.state
