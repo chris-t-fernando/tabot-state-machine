@@ -5,8 +5,9 @@ from strategies.macd import (
     MacdStateWaiting,
     MacdStateTerminated,
     MacdTA,
+    MacdInstanceTemplate,
 )
-from core.abstracts import InstanceTemplate, ControllerConfig, InstanceController, Symbol
+from core.abstracts import ControllerConfig, InstanceController, Symbol
 import btalib
 import logging
 
@@ -19,12 +20,13 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
-logging.getLogger(__name__).setLevel(logging.DEBUG)
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 logging.getLogger("symbol.symbol_data").setLevel(logging.WARNING)
 logging.getLogger("core.abstracts").setLevel(logging.DEBUG)
 logging.getLogger("strategies.macd").setLevel(logging.DEBUG)
 
-play_template_1 = InstanceTemplate(
+play_template_1 = MacdInstanceTemplate(
     buy_signal_strength=1,
     take_profit_trigger_pct_of_risk=1,
     take_profit_pct_to_sell=1,
@@ -33,13 +35,14 @@ play_template_1 = InstanceTemplate(
     stop_loss_hold_intervals=1,
 )
 
-play_template_2 = InstanceTemplate(
+play_template_2 = MacdInstanceTemplate(
     buy_signal_strength=0.9,
     take_profit_trigger_pct_of_risk=0.9,
     take_profit_pct_to_sell=0.9,
     stop_loss_type="limit",
     stop_loss_trigger_pct=0.90,
     stop_loss_hold_intervals=0.9,
+    check_sma=False
 )
 
 
@@ -62,7 +65,7 @@ symbol.ohlc.apply_ta(btalib.sma)
 symbol.ohlc.apply_ta(MacdTA.macd)
 
 current_interval_key = 3500
-current_interval = symbol.ohlc.bars.index[current_interval_key]
+# current_interval = symbol.ohlc.bars.index[current_interval_key]
 bar_len = len(symbol.ohlc.bars)
 
 symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
@@ -71,11 +74,14 @@ controller = InstanceController(symbol, play_config)  # also creates a play tele
 controller.start_play()
 
 while current_interval_key <= bar_len:
-    logger.debug(f"Checking {current_interval}")
+    current_interval = symbol.ohlc.bars.index[current_interval_key]
+    if current_interval_key % 100 == 0:
+        log.debug(f"Checking loc {current_interval_key} at {current_interval}")
+
     controller.run()
 
     current_interval_key += 1
-    current_interval = symbol.ohlc.bars.index[current_interval_key]
+
     symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
 
 # so who decides the wait period?

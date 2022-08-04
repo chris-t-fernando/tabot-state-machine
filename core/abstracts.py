@@ -26,12 +26,32 @@ It is possible but unusual for a Strategy to extend the following abstracts (usu
     AState
 """
 
-STATE_STAY = 0
-STATE_SPLIT = 1
-STATE_MOVE = 2
+
+class InstanceTemplate(ABC):
+    def __init__(
+        self,
+        buy_signal_strength: float,
+        take_profit_trigger_pct_of_risk: float,
+        take_profit_pct_to_sell: float,
+        stop_loss_trigger_pct: float,
+        stop_loss_type: str = "market",
+        stop_loss_hold_intervals: int = 1,
+        buy_timeout_intervals: int = 2,
+    ) -> None:
+        self.buy_signal_strength = buy_signal_strength
+        self.take_profit_trigger_pct_of_risk = take_profit_trigger_pct_of_risk
+        self.take_profit_pct_to_sell = take_profit_pct_to_sell
+        self.stop_loss_trigger_pct = stop_loss_trigger_pct
+        self.stop_loss_type = stop_loss_type
+        self.stop_loss_hold_intervals = stop_loss_hold_intervals
+        self.buy_timeout_intervals = buy_timeout_intervals
 
 
 class State(ABC):
+    STATE_STAY = 0
+    STATE_SPLIT = 1
+    STATE_MOVE = 2
+
     @abstractmethod
     def __init__(self, previous_state, parent_instance=None) -> None:
         log.debug(f"Started {self.__repr__()}")
@@ -50,6 +70,10 @@ class State(ABC):
     @property
     def ohlc(self) -> SymbolData:
         return self.parent_instance.ohlc
+
+    @property
+    def config(self) -> InstanceTemplate:
+        return self.parent_instance.config
 
     # @ohlc.setter
     # def ohlc(self, ohlc_source):
@@ -125,26 +149,6 @@ class ControllerTelemetry(ABC):
         self.instance_count = 0
 
 
-class InstanceTemplate(ABC):
-    def __init__(
-        self,
-        buy_signal_strength: float,
-        take_profit_trigger_pct_of_risk: float,
-        take_profit_pct_to_sell: float,
-        stop_loss_trigger_pct: float,
-        stop_loss_type: str = "market",
-        stop_loss_hold_intervals: int = 1,
-        buy_timeout_intervals: int = 2,
-    ) -> None:
-        self.buy_signal_strength = buy_signal_strength
-        self.take_profit_trigger_pct_of_risk = take_profit_trigger_pct_of_risk
-        self.take_profit_pct_to_sell = take_profit_pct_to_sell
-        self.stop_loss_trigger_pct = stop_loss_trigger_pct
-        self.stop_loss_type = stop_loss_type
-        self.stop_loss_hold_intervals = stop_loss_hold_intervals
-        self.buy_timeout_intervals = buy_timeout_intervals
-
-
 class ControllerConfig(ABC):
     state_waiting: State = None
     state_entering_position: State = None
@@ -192,14 +196,14 @@ class Instance(ABC):
     def run(self):
         # new_state_args is a dict of args to be handed to new_state on instantiation
         instance_action, new_state, new_state_args = self._state.check_exit()
-        if instance_action == STATE_STAY:
+        if instance_action == State.STATE_STAY:
             log.log(9, "STATE_STAY")
             return
-        elif instance_action == STATE_MOVE:
+        elif instance_action == State.STATE_MOVE:
             log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
             self.state = new_state
             return
-        elif instance_action == STATE_SPLIT:
+        elif instance_action == State.STATE_SPLIT:
             log.log(9, "STATE_SPLIT")
             # to split means to leave this instance where it is, and spawn a new instance at
             # whatever the next state is

@@ -1,3 +1,4 @@
+from tabnanny import check
 from core.abstracts import (
     IStateWaiting,
     IStateEnteringPosition,
@@ -6,9 +7,7 @@ from core.abstracts import (
     IStateTakingProfit,
     IStateTerminated,
     Instance,
-    STATE_STAY,
-    STATE_SPLIT,
-    STATE_MOVE,
+    InstanceTemplate,
 )
 
 import btalib
@@ -73,51 +72,64 @@ class MacdTA:
         return MacdTA.MacdColumns(df)
 
 
+class MacdInstanceTemplate(InstanceTemplate):
+    def __init__(
+        self,
+        buy_signal_strength: float,
+        take_profit_trigger_pct_of_risk: float,
+        take_profit_pct_to_sell: float,
+        stop_loss_trigger_pct: float,
+        stop_loss_type: str = "market",
+        stop_loss_hold_intervals: int = 1,
+        buy_timeout_intervals: int = 2,
+        check_sma: bool = True,
+    ) -> None:
+        super().__init__(
+            buy_signal_strength=buy_signal_strength,
+            take_profit_trigger_pct_of_risk=take_profit_trigger_pct_of_risk,
+            take_profit_pct_to_sell=take_profit_pct_to_sell,
+            stop_loss_trigger_pct=stop_loss_trigger_pct,
+            stop_loss_type=stop_loss_type,
+            stop_loss_hold_intervals=stop_loss_hold_intervals,
+            buy_timeout_intervals=buy_timeout_intervals,
+        )
+        self.check_sma = check_sma
+
+
 class MacdStateWaiting(IStateWaiting):
     def __init__(self, parent_instance: Instance, previous_state: State = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
-        # simple function to check if a pandas series contains a macd buy signal
-        crossover = False
-        macd_negative = False
-        sma_trending_up = False
-
         df = self.ohlc.get_range()
-
         row = df.iloc[-1]
 
-        if row.macd_crossover == True:
-            crossover = True
-            log.debug(f"MACD crossover found")
-        else:
-            log.debug(f"MACD crossover was not found")
-
-        if row.macd_macd < 0:
-            macd_negative = True
-            log.debug(f"MACD is less than 0: {row.macd_macd}")
-        else:
-            log.debug("MACD is not negative")
-
+        crossover = MacdStateWaiting.check_crossover(row)
+        macd_negative = MacdStateWaiting.check_macd_negative(row)
         last_sma = MacdStateWaiting.get_last_sma(df=df)
         recent_average_sma = MacdStateWaiting.get_recent_average_sma(df=df)
         sma_trending_up = MacdStateWaiting.check_sma(
             last_sma=last_sma, recent_average_sma=recent_average_sma
         )
 
-        # if crossover and macd_negative and sma_trending_up:
-        if crossover and macd_negative:
+        signal_found = crossover and macd_negative
+        if self.config.check_sma:
+            signal_found = sma_trending_up and signal_found
+
+        if signal_found:
             # all conditions met for a buy
             log.info(
-                f"{self.symbol_str}: FOUND BUY SIGNAL NO SMA AT {df.index[-1]} (MACD {round(row.macd_macd,4)} vs "
-                f"signal {round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)})"
+                f"{self.symbol_str}: FOUND BUY SIGNAL AT {row.name} (MACD {round(row.macd_macd,4)} vs "
+                f"signal {round(row.macd_signal,4)}, SMA LAST {round(last_sma,4)} vs AVG {round(recent_average_sma,4)})"
             )
-            return STATE_MOVE, MacdStateEnteringPosition, {}
+            return State.STATE_MOVE, MacdStateEnteringPosition, {}
 
-        log.debug(
-            f"{self.symbol_str}: No buy signal at {df.index[-1]} (MACD {round(row.macd_macd,4)} vs signal {round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)}"
+        log.log(
+            9,
+            f"{self.symbol_str}: No buy signal at {df.index[-1]} (MACD {round(row.macd_macd,4)} vs signal "
+            f"{round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)}",
         )
-        return STATE_STAY, None, {}
+        return State.STATE_STAY, None, {}
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
@@ -128,6 +140,23 @@ class MacdStateWaiting(IStateWaiting):
 
     def get_recent_average_sma(df):
         return df.sma.iloc[-20]
+
+    def check_macd_negative(row):
+        if row.macd_macd < 0:
+            macd_negative = True
+            log.log(9, f"MACD is less than 0: {row.macd_macd}")
+            return True
+        else:
+            log.log(9, "MACD is not negative")
+            return False
+
+    def check_crossover(row):
+        if row.macd_crossover == True:
+            log.log(9, f"MACD crossover found")
+            return True
+        else:
+            log.log(9, f"MACD crossover was not found")
+            return False
 
     def check_sma(last_sma: float, recent_average_sma: float, ignore_sma: bool = False):
         if ignore_sma:
@@ -148,7 +177,7 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return STATE_MOVE, MacdStateTakingProfit, {}
+        return State.STATE_MOVE, MacdStateTakingProfit, {}
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
@@ -161,7 +190,7 @@ class MacdStateTakingProfit(IStateTakingProfit):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return STATE_MOVE, MacdStateStoppingLoss, {}
+        return State.STATE_MOVE, MacdStateStoppingLoss, {}
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
@@ -174,7 +203,7 @@ class MacdStateStoppingLoss(IStateStoppingLoss):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return STATE_MOVE, MacdStateTerminated, {}
+        return State.STATE_MOVE, MacdStateTerminated, {}
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
@@ -187,7 +216,7 @@ class MacdStateTerminated(IStateTerminated):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return STATE_STAY, None, {}
+        return State.STATE_STAY, None, {}
 
     def do_exit(self):
         raise NotImplementedError(f"Terminated state cannot implement do_exit()")
