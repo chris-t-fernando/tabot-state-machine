@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from symbol.symbol import Symbol
 from symbol.symbol_data import SymbolData
+from datetime import datetime
 import uuid
 import logging
 
@@ -30,6 +31,7 @@ It is possible but unusual for a Strategy to extend the following abstracts (usu
 class InstanceTemplate(ABC):
     def __init__(
         self,
+        name: str,
         buy_signal_strength: float,
         take_profit_trigger_pct_of_risk: float,
         take_profit_pct_to_sell: float,
@@ -38,6 +40,7 @@ class InstanceTemplate(ABC):
         stop_loss_hold_intervals: int = 1,
         buy_timeout_intervals: int = 2,
     ) -> None:
+        self.name = name
         self.buy_signal_strength = buy_signal_strength
         self.take_profit_trigger_pct_of_risk = take_profit_trigger_pct_of_risk
         self.take_profit_pct_to_sell = take_profit_pct_to_sell
@@ -45,6 +48,9 @@ class InstanceTemplate(ABC):
         self.stop_loss_type = stop_loss_type
         self.stop_loss_hold_intervals = stop_loss_hold_intervals
         self.buy_timeout_intervals = buy_timeout_intervals
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} '{self.name}'>"
 
 
 class State(ABC):
@@ -83,15 +89,24 @@ class State(ABC):
     def check_exit(self):
         log.debug(f"Started check_exit on {self.__repr__()}")
 
-    @abstractmethod
+    # it is not mandatory to implement do_exit
+    # @abstractmethod
     def do_exit(self):
-        log.debug(f"Started do_exit on {self.__repr__()}")
+        log.debug(f"Finished do_exit on {self.__repr__()}")
 
     def __del__(self):
         log.log(9, f"Deleting {self.__repr__()}")
 
     def __repr__(self) -> str:
         return self.__class__.__name__
+
+    @property
+    def stop_loss_price(self):
+        return self.parent_instance.stop_loss_price
+
+    @stop_loss_price.setter
+    def stop_loss_price(self, new_stop_loss_price):
+        self.parent_instance.stop_loss_price = new_stop_loss_price
 
 
 class IStateWaiting(State):
@@ -187,6 +202,13 @@ class Instance(ABC):
         self.ohlc = play_controller.symbol.ohlc
         self.symbol_str = play_controller.symbol.yf_symbol
         self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
+        self.start_timestamp = datetime.utcnow()
+        self._held_value = 0
+        self._held_units = 0
+        self._stop_price = None
+        self._target_price = None
+        self._buy_order_id = None
+        self._sales_orders = None
 
         if state == None:
             self._state = play_controller.play_config.state_waiting(parent_instance=self)
@@ -235,6 +257,25 @@ class Instance(ABC):
 
         self._state = new_state(previous_state=self._state)
         log.log(9, f"successfully set new state to {self._state}")
+
+    @property
+    def held_units(self):
+        return self._held_units
+
+    @held_units.setter
+    def held_units(self, new_units):
+        # TODO add in telemetry hook
+        self._held_units = new_units
+
+    @property
+    def stop_loss_price(self):
+        return self._stop_price
+
+    @stop_loss_price.setter
+    def stop_loss_price(self, new_stop_loss_price):
+        # TODO add in telemetry hook
+        aligned_stop_price = self.symbol.align_price(new_stop_loss_price)
+        self._stop_price = aligned_stop_price
 
 
 class InstanceController(ABC):

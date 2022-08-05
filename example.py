@@ -27,6 +27,7 @@ logging.getLogger("core.abstracts").setLevel(logging.DEBUG)
 logging.getLogger("strategies.macd").setLevel(logging.DEBUG)
 
 play_template_1 = MacdInstanceTemplate(
+    name="template1",
     buy_signal_strength=1,
     take_profit_trigger_pct_of_risk=1,
     take_profit_pct_to_sell=1,
@@ -36,15 +37,15 @@ play_template_1 = MacdInstanceTemplate(
 )
 
 play_template_2 = MacdInstanceTemplate(
+    name="template2",
     buy_signal_strength=0.9,
     take_profit_trigger_pct_of_risk=0.9,
     take_profit_pct_to_sell=0.9,
     stop_loss_type="limit",
     stop_loss_trigger_pct=0.90,
     stop_loss_hold_intervals=0.9,
-    check_sma=False
+    check_sma=False,
 )
-
 
 play_config = ControllerConfig(
     state_waiting=MacdStateWaiting,

@@ -1,3 +1,4 @@
+from audioop import cross
 from tabnanny import check
 from core.abstracts import (
     IStateWaiting,
@@ -75,6 +76,7 @@ class MacdTA:
 class MacdInstanceTemplate(InstanceTemplate):
     def __init__(
         self,
+        name: str,
         buy_signal_strength: float,
         take_profit_trigger_pct_of_risk: float,
         take_profit_pct_to_sell: float,
@@ -83,8 +85,10 @@ class MacdInstanceTemplate(InstanceTemplate):
         stop_loss_hold_intervals: int = 1,
         buy_timeout_intervals: int = 2,
         check_sma: bool = True,
+        sma_comparison_period: int = 20,
     ) -> None:
         super().__init__(
+            name=name,
             buy_signal_strength=buy_signal_strength,
             take_profit_trigger_pct_of_risk=take_profit_trigger_pct_of_risk,
             take_profit_pct_to_sell=take_profit_pct_to_sell,
@@ -94,6 +98,7 @@ class MacdInstanceTemplate(InstanceTemplate):
             buy_timeout_intervals=buy_timeout_intervals,
         )
         self.check_sma = check_sma
+        self.sma_comparison_period = sma_comparison_period
 
 
 class MacdStateWaiting(IStateWaiting):
@@ -101,13 +106,15 @@ class MacdStateWaiting(IStateWaiting):
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
+        config_period = self.config.sma_comparison_period
+
         df = self.ohlc.get_range()
         row = df.iloc[-1]
 
         crossover = MacdStateWaiting.check_crossover(row)
         macd_negative = MacdStateWaiting.check_macd_negative(row)
         last_sma = MacdStateWaiting.get_last_sma(df=df)
-        recent_average_sma = MacdStateWaiting.get_recent_average_sma(df=df)
+        recent_average_sma = MacdStateWaiting.get_recent_average_sma(df=df, period=config_period)
         sma_trending_up = MacdStateWaiting.check_sma(
             last_sma=last_sma, recent_average_sma=recent_average_sma
         )
@@ -132,48 +139,92 @@ class MacdStateWaiting(IStateWaiting):
         return State.STATE_STAY, None, {}
 
     def do_exit(self):
-        log.log(9, f"doing exit on {self}")
-        return
+        # calculate stop loss
+        df = self.ohlc.get_range()
 
-    def get_last_sma(df):
+        blue_cycle_start = MacdStateWaiting.get_blue_cycle_start(df=df)
+        red_cycle_start = MacdStateWaiting.get_red_cycle_start(df=df, before_date=blue_cycle_start)
+
+        stop_loss_unit = MacdStateWaiting.calculate_stop_loss_unit_price(
+            df=df,
+            start_date=red_cycle_start,
+            end_date=blue_cycle_start,
+        )
+
+        stop_unit_date = MacdStateWaiting.calculate_stop_loss_date(
+            df=df,
+            start_date=red_cycle_start,
+            end_date=blue_cycle_start,
+        )
+
+        intervals_since_stop = MacdStateWaiting.count_intervals(df=df, start_date=stop_unit_date)
+
+        log.log(
+            logging.DEBUG,
+            f"{self.symbol}: Last cycle started on {red_cycle_start}, "
+            f"{intervals_since_stop} intervals ago",
+        )
+        log.log(
+            logging.DEBUG,
+            f"{self.symbol}: The lowest price during that cycle was {stop_loss_unit} "
+            f"on {stop_unit_date}. This will be used as the stop loss for this instance",
+        )
+
+        self.stop_loss_price = stop_loss_unit
+
+        super().do_exit()
+
+    def calculate_stop_loss_unit_price(df: pd.DataFrame, start_date, end_date):
+        return df.loc[start_date:end_date].Close.min()
+
+    def calculate_stop_loss_date(df: pd.DataFrame, start_date, end_date):
+        return df.loc[start_date:end_date].Close.idxmin()
+
+    def count_intervals(df: pd.DataFrame, start_date, end_date=None):
+        if end_date == None:
+            return len(df.loc[start_date:])
+        else:
+            return len(df.loc[start_date:end_date])
+
+    def get_last_sma(df: pd.DataFrame):
         return df.iloc[-1].sma
 
-    def get_recent_average_sma(df):
-        return df.sma.iloc[-20]
+    def get_recent_average_sma(df: pd.DataFrame, period: int):
+        return df.sma.iloc[-period]
 
     def check_macd_negative(row):
-        if row.macd_macd < 0:
-            macd_negative = True
-            log.log(9, f"MACD is less than 0: {row.macd_macd}")
-            return True
-        else:
-            log.log(9, "MACD is not negative")
-            return False
+        macd_negative = row.macd_macd < 0
+        log.log(9, f"MACD {row.macd_macd} is < 0 = {macd_negative}")
+        return macd_negative
 
-    def check_crossover(row):
-        if row.macd_crossover == True:
-            log.log(9, f"MACD crossover found")
-            return True
-        else:
-            log.log(9, f"MACD crossover was not found")
-            return False
+    def check_crossover(row: pd.Series):
+        crossover = row.macd_crossover == True
+        log.log(9, f"MACD crossover = {crossover}")
+        return crossover
 
     def check_sma(last_sma: float, recent_average_sma: float, ignore_sma: bool = False):
         if ignore_sma:
-            log.warning(f"Returning True since ignore_sma is enabled")
+            log.warning(f"SMA check = True (ignore_sma is enabled)")
             return True
 
-        if last_sma > recent_average_sma:
-            log.log(9, f"True, last SMA {last_sma} > {recent_average_sma}")
-            return True
-        else:
-            log.log(9, f"False, last SMA {last_sma} > {recent_average_sma}")
-            return False
+        sma_rising = last_sma > recent_average_sma
+        log.log(9, f"SMA check = {sma_rising} ({last_sma} > {recent_average_sma})")
+        return sma_rising
+
+    # maybe dont need these. need to store this stuff in instance, not state
+    def get_red_cycle_start(df: pd.DataFrame, before_date: pd.Timestamp):
+        return df.loc[
+            (df["macd_cycle"] == "blue") & (df.index < before_date) & (df.macd_crossover == True)
+        ].index[-1]
+
+    def get_blue_cycle_start(df: pd.DataFrame):
+        return df.loc[(df.macd_crossover == True) & (df.macd_macd < 0)].index[-1]
 
 
 class MacdStateEnteringPosition(IStateEnteringPosition):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
+        # here we want to
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
