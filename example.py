@@ -71,7 +71,7 @@ broker = alpaca.AlpacaAPI(
 )
 
 symbol = Symbol(
-    yf_symbol="BTC-USD", back_testing=True
+    yf_symbol="DOGE-USD", back_testing=True
 )  # need to do api calls to generate increments etc
 
 symbol.ohlc.apply_ta(btalib.sma)

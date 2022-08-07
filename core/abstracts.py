@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from symbol.symbol import Symbol, InvalidQuantity
+from symbol.symbol import Symbol, InvalidQuantity, InvalidPrice
 from symbol.symbol_data import SymbolData
 from datetime import datetime
 import uuid
@@ -131,41 +131,58 @@ class IStateWaiting(State):
 class IStateEnteringPosition(State):
     @abstractmethod
     # def __init__(self, parent_instance, previous_state: State) -> None:
-    def __init__(self, previous_state: State, parent_instance=None) -> None:
+    def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
-        if not hasattr(self, "type"):
-            type = "limit"
-        else:
-            type = self.type
+        # default behaviour is to put in a limit price at the last close price
+        # options:
+        #  - order_type to specify a limit or market buy order type. Default is 'limit'
+        #  - limit_price to specify the limit price, if limit order is used. Default is last close
+        #  - units to specify number of units to purchase. Defaults:
+        #    - for 'limit' orders, config.buy_budget / limit_price
+        #    - for 'market' orders, config.buy_budget / last close price
 
-        if not hasattr(self, "limit"):
-            if type == "limit":
-                bars = self.ohlc.get_latest()
-                limit = bars.Close
-            else:
-                limit = None
+        order_type = kwargs.get("type", "limit")
 
-        if not hasattr(self, "units"):
-            bars = self.ohlc.get_latest()
-            last_price = bars.Close
+        # boolean checks to see if we need to generate a limit price
+        limit_specified = kwargs.get("limit_price")
+        generate_limit = not limit_specified and order_type == "limit"
+
+        if generate_limit:
+            _bars = self.ohlc.get_latest()
+            limit_price = _bars.Close
+
+            aligned_limit_price = self.symbol.align_price(limit_price)
+        elif limit_specified:
+            # make sure they aligned quantity
+            aligned_limit_price = self.symbol.align_price(limit_specified)
+
+            if aligned_limit_price != limit_specified:
+                raise InvalidPrice(f"Call <symbol>.align_price() before submitting a buy order!")
+
+        units = kwargs.get("units")
+        if not units:
+            _bars = self.ohlc.get_latest()
+            last_price = _bars.Close
             budget = self.config.buy_budget
-            unaligned_units = budget / last_price
+            units = budget / last_price
 
-            if not self.symbol.notional_units:
-                unaligned_units = floor(unaligned_units)
+        if not self.symbol.notional_units:
+            units = floor(units)
 
-            units = self.symbol.align_quantity(unaligned_units)
+        try:
+            # can throw error for insufficient units
+            aligned_units = self.symbol.align_quantity(units)
+        except:
+            raise
 
-        else:
-            if self.symbol.align_quantity(self.units) != self.units:
-                raise InvalidQuantity(f"Call Symbol.align_quantity() before submitting a buy order")
+        # this is my own validation - make sure that the units ordered = the units after rounding
+        if aligned_units != units:
+            raise InvalidQuantity(f"Call <symbol>.align_quantity() before submitting a buy order!")
 
-            units = self.units
-
-        if type == "limit":
+        if order_type == "limit":
             order = self.broker.buy_order_limit(
-                symbol=self.symbol_str, units=units, unit_price=limit
+                symbol=self.symbol_str, units=aligned_units, unit_price=aligned_limit_price
             )
         else:
             order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
