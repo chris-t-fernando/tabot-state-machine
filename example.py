@@ -1,3 +1,6 @@
+from broker_api import alpaca
+from parameter_store.ssm import Ssm
+
 from strategies.macd import (
     MacdStateEnteringPosition,
     MacdStateStoppingLoss,
@@ -7,7 +10,7 @@ from strategies.macd import (
     MacdTA,
     MacdInstanceTemplate,
 )
-from core.abstracts import ControllerConfig, InstanceController, Symbol
+from core.abstracts import ControllerConfig, Controller, Symbol
 import btalib
 import logging
 
@@ -57,9 +60,18 @@ play_config = ControllerConfig(
     play_templates=[play_template_1, play_template_2],
 )
 
+store = Ssm()
+_PREFIX = "tabot"
+api_key = store.get(f"/{_PREFIX}/paper/alpaca/api_key")
+security_key = store.get(f"/{_PREFIX}/paper/alpaca/security_key")
+
+broker = alpaca.AlpacaAPI(
+    alpaca_key_id=api_key,
+    alpaca_secret_key=security_key,
+)
 
 symbol = Symbol(
-    yf_symbol="BTC-USD", alp_symbol="BTCUSD", back_testing=True
+    yf_symbol="BTC-USD", back_testing=True
 )  # need to do api calls to generate increments etc
 
 symbol.ohlc.apply_ta(btalib.sma)
@@ -71,7 +83,7 @@ bar_len = len(symbol.ohlc.bars)
 
 symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
 
-controller = InstanceController(symbol, play_config)  # also creates a play telemetry object
+controller = Controller(symbol, play_config, broker)  # also creates a play telemetry object
 controller.start_play()
 
 while current_interval_key <= bar_len:

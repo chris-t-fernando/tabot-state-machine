@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
-from symbol.symbol import Symbol
+from symbol.symbol import Symbol, InvalidQuantity
 from symbol.symbol_data import SymbolData
 from datetime import datetime
 import uuid
 import logging
+from math import floor
+from broker_api.ibroker_api import ITradeAPI
 
 log = logging.getLogger(__name__)
 
@@ -58,28 +60,39 @@ class State(ABC):
     STATE_SPLIT = 1
     STATE_MOVE = 2
 
+    symbol: Symbol
+    symbol_str: str
+    ohlc: SymbolData
+    config: InstanceTemplate
+    broker: ITradeAPI
+
     @abstractmethod
     def __init__(self, previous_state, parent_instance=None) -> None:
         log.debug(f"Started {self.__repr__()}")
         self.previous_state = previous_state
         if not parent_instance:
             self.parent_instance = previous_state.parent_instance
-            self.symbol = previous_state.parent_instance.symbol
-            self.symbol_str = previous_state.parent_instance.symbol_str
+            config_source = previous_state
         else:
             self.parent_instance = parent_instance
-            self.symbol = parent_instance.symbol
-            self.symbol_str = parent_instance.symbol_str
+            config_source = parent_instance
+
+        self.symbol = config_source.symbol
+        self.symbol_str = config_source.symbol_str
+        self.ohlc = config_source.symbol.ohlc
+        self.config = config_source.config
+        self.broker = config_source.broker
+        self.controller = self.parent_instance.parent_controller
 
         # self.ohlc = parent_instance.ohlc
 
-    @property
-    def ohlc(self) -> SymbolData:
-        return self.parent_instance.ohlc
+    # @property
+    # def ohlc(self) -> SymbolData:
+    #    return self.parent_instance.ohlc
 
-    @property
-    def config(self) -> InstanceTemplate:
-        return self.parent_instance.config
+    # @property
+    # def config(self) -> InstanceTemplate:
+    #    return self.parent_instance.config
 
     # @ohlc.setter
     # def ohlc(self, ohlc_source):
@@ -89,12 +102,11 @@ class State(ABC):
     def check_exit(self):
         log.debug(f"Started check_exit on {self.__repr__()}")
 
-    # it is not mandatory to implement do_exit
-    # @abstractmethod
     def do_exit(self):
         log.debug(f"Finished do_exit on {self.__repr__()}")
 
     def __del__(self):
+        # use this to make sure that open orders are cancelled?
         log.log(9, f"Deleting {self.__repr__()}")
 
     def __repr__(self) -> str:
@@ -121,6 +133,42 @@ class IStateEnteringPosition(State):
     # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
+
+        if not hasattr(self, "type"):
+            type = "limit"
+        else:
+            type = self.type
+
+        if not hasattr(self, "limit"):
+            if type == "limit":
+                bars = self.ohlc.get_latest()
+                limit = bars.Close
+            else:
+                limit = None
+
+        if not hasattr(self, "units"):
+            bars = self.ohlc.get_latest()
+            last_price = bars.Close
+            budget = self.config.buy_budget
+            unaligned_units = budget / last_price
+
+            if not self.symbol.notional_units:
+                unaligned_units = floor(unaligned_units)
+
+            units = self.symbol.align_quantity(unaligned_units)
+
+        else:
+            if self.symbol.align_quantity(self.units) != self.units:
+                raise InvalidQuantity(f"Call Symbol.align_quantity() before submitting a buy order")
+
+            units = self.units
+
+        if type == "limit":
+            order = self.broker.buy_order_limit(
+                symbol=self.symbol_str, units=units, unit_price=limit
+            )
+        else:
+            order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
 
 
 class IStateTakingProfit(State):
@@ -198,6 +246,7 @@ class Instance(ABC):
     ) -> None:
         self.config = template
         self.parent_controller = play_controller
+        self.broker = play_controller.broker
         self.symbol = play_controller.symbol
         self.ohlc = play_controller.symbol.ohlc
         self.symbol_str = play_controller.symbol.yf_symbol
@@ -278,21 +327,28 @@ class Instance(ABC):
         self._stop_price = aligned_stop_price
 
 
-class InstanceController(ABC):
+class Controller(ABC):
     def __init__(
         self,
         symbol: Symbol,
         play_config: ControllerConfig,
+        broker,
         play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
         self.play_config = play_config
+        self._inject_common_config()
         self.play_id = self._generate_play_id()
+        self.broker = broker
         # PlayInstance class to be use - can be overridden to enable extension
         self.play_instance_class = play_instance_class
         self.instances = []
         self.terminated_instances = []
         self.telemetry = ControllerTelemetry()
+
+    def _inject_common_config(self):
+        for template in self.play_config.play_templates:
+            template.buy_budget = self.play_config.buy_budget
 
     def start_play(self):
         if len(self.instances) > 0:

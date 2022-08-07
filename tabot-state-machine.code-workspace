@@ -5,6 +5,15 @@
 		},
 		{
 			"path": "..\\symbol-cache"
+		},
+		{
+			"path": "..\\broker-api"
+		},
+		{
+			"path": "..\\parameter-store"
+		},
+		{
+			"path": "..\\notification-service"
 		}
 	],
 	"settings": {}

@@ -139,6 +139,8 @@ class MacdStateWaiting(IStateWaiting):
         return State.STATE_STAY, None, {}
 
     def do_exit(self):
+        # TODO - change signature on base class to the variables that must be handed to next step?
+
         # calculate stop loss
         df = self.ohlc.get_range()
 
@@ -170,6 +172,7 @@ class MacdStateWaiting(IStateWaiting):
             f"on {stop_unit_date}. This will be used as the stop loss for this instance",
         )
 
+        # put stop loss in to instance
         self.stop_loss_price = stop_loss_unit
 
         super().do_exit()
@@ -224,7 +227,6 @@ class MacdStateWaiting(IStateWaiting):
 class MacdStateEnteringPosition(IStateEnteringPosition):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
-        # here we want to
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
