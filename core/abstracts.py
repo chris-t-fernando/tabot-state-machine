@@ -30,6 +30,10 @@ It is possible but unusual for a Strategy to extend the following abstracts (usu
 """
 
 
+class UnhandledBrokerException(Exception):
+    ...
+
+
 class InstanceTemplate(ABC):
     def __init__(
         self,
@@ -123,14 +127,12 @@ class State(ABC):
 
 class IStateWaiting(State):
     @abstractmethod
-    # def __init__(self, parent_instance, previous_state: State = None) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateEnteringPosition(State):
     @abstractmethod
-    # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
@@ -151,12 +153,11 @@ class IStateEnteringPosition(State):
         if generate_limit:
             _bars = self.ohlc.get_latest()
             limit_price = _bars.Close
-
             aligned_limit_price = self.symbol.align_price(limit_price)
+
         elif limit_specified:
             # make sure they aligned quantity
             aligned_limit_price = self.symbol.align_price(limit_specified)
-
             if aligned_limit_price != limit_specified:
                 raise InvalidPrice(f"Call <symbol>.align_price() before submitting a buy order")
 
@@ -190,6 +191,7 @@ class IStateEnteringPosition(State):
 
             # hold on to the order result object for further inspection in check_exit and do_exit
             self.order = order
+            self.intervals_until_timeout = self.config.buy_timeout_intervals
 
         except Exception as e:
             # you need a way to either retry this or mark this object as tainted so that check_exit barfs
@@ -212,13 +214,21 @@ class IStateEnteringPosition(State):
             return State.STATE_MOVE, taking_profit_state, {}
 
         elif order.status_summary == "open" or order.status_summary == "pending":
-            log.info(f"Order ID {order_id} is still in state {order.status_summary}")
-            return State.STATE_STAY, None, {}
+            self.intervals_until_timeout -= 1
+
+            if self.intervals_until_timeout == 0:
+                terminated_state = self.controller.play_config.state_terminated
+                log.info(f"Order ID {order_id} has timed out, moving to {terminated_state}")
+                return State.STATE_MOVE, terminated_state, {}
+
+            else:
+                log.info(f"Order ID {order_id} is still in state {order.status_summary}")
+                return State.STATE_STAY, None, {}
 
         elif order.status_summary == "cancelled":
             terminated_state = self.controller.play_config.state_terminated
             log.info(f"Order ID {order_id} has been cancelled, moving to {terminated_state}")
-            return State.Move, terminated_state, {}
+            return State.STATE_MOVE, terminated_state, {}
 
         else:
             print("wut")
@@ -226,9 +236,10 @@ class IStateEnteringPosition(State):
 
 class IStateTakingProfit(State):
     @abstractmethod
-    # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
+
+        # need to submit a take profit order
 
     def check_exit(self):
         return super().check_exit()
@@ -246,6 +257,20 @@ class IStateTerminated(State):
     # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
+
+        # previous state has an order that might still be open
+        if hasattr(previous_state, "order"):
+            order_id = previous_state.order.order_id
+            order = self.broker.get_order(order_id)
+
+            if not order.closed:
+                cancel_order = self.broker.cancel_order(order_id)
+
+                if not cancel_order.closed:
+                    raise UnhandledBrokerException(
+                        f"Failed to cancel {order.order_type_text} order ID {order_id}. State is {order.status_text}"
+                    )
+                log.info(f"Successfully cancelled order {order_id}")
 
 
 class InstanceTelemetry(ABC):
