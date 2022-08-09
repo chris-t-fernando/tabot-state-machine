@@ -230,11 +230,11 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return State.STATE_MOVE, MacdStateTakingProfit, {}
+        return super().check_exit()
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")
-        return
+        return super().do_exit()
 
 
 class MacdStateTakingProfit(IStateTakingProfit):

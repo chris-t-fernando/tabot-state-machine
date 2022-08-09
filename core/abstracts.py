@@ -100,10 +100,10 @@ class State(ABC):
 
     @abstractmethod
     def check_exit(self):
-        log.debug(f"Started check_exit on {self.__repr__()}")
+        log.log(9, f"Started check_exit on {self.__repr__()}")
 
     def do_exit(self):
-        log.debug(f"Finished do_exit on {self.__repr__()}")
+        log.log(9, f"Finished do_exit on {self.__repr__()}")
 
     def __del__(self):
         # use this to make sure that open orders are cancelled?
@@ -158,7 +158,7 @@ class IStateEnteringPosition(State):
             aligned_limit_price = self.symbol.align_price(limit_specified)
 
             if aligned_limit_price != limit_specified:
-                raise InvalidPrice(f"Call <symbol>.align_price() before submitting a buy order!")
+                raise InvalidPrice(f"Call <symbol>.align_price() before submitting a buy order")
 
         units = kwargs.get("units")
         if not units:
@@ -178,14 +178,50 @@ class IStateEnteringPosition(State):
 
         # this is my own validation - make sure that the units ordered = the units after rounding
         if aligned_units != units:
-            raise InvalidQuantity(f"Call <symbol>.align_quantity() before submitting a buy order!")
+            raise InvalidQuantity(f"Call <symbol>.align_quantity() before submitting a buy order")
 
-        if order_type == "limit":
-            order = self.broker.buy_order_limit(
-                symbol=self.symbol_str, units=aligned_units, unit_price=aligned_limit_price
-            )
+        try:
+            if order_type == "limit":
+                order = self.broker.buy_order_limit(
+                    symbol=self.symbol_str, units=aligned_units, unit_price=aligned_limit_price
+                )
+            else:
+                order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
+
+            # hold on to the order result object for further inspection in check_exit and do_exit
+            self.order = order
+
+        except Exception as e:
+            # you need a way to either retry this or mark this object as tainted so that check_exit barfs
+            print("Banana")
+
+    def check_exit(self):
+        super().check_exit()
+
+        # check if order is still open / dead / partially filled
+        # depending on this, return different options
+        order_id = self.order.order_id
+
+        # get the order from the broker
+        order = self.broker.get_order(order_id)
+
+        if order.status_summary == "filled":
+            # fully filled
+            taking_profit_state = self.controller.play_config.state_taking_profit
+            log.info(f"Order ID {order_id} has been filled, moving to {taking_profit_state}")
+            return State.STATE_MOVE, taking_profit_state, {}
+
+        elif order.status_summary == "open" or order.status_summary == "pending":
+            log.info(f"Order ID {order_id} is still in state {order.status_summary}")
+            return State.STATE_STAY, None, {}
+
+        elif order.status_summary == "cancelled":
+            terminated_state = self.controller.play_config.state_terminated
+            log.info(f"Order ID {order_id} has been cancelled, moving to {terminated_state}")
+            return State.Move, terminated_state, {}
+
         else:
-            order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
+            print("wut")
 
 
 class IStateTakingProfit(State):
@@ -193,6 +229,9 @@ class IStateTakingProfit(State):
     # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
+
+    def check_exit(self):
+        return super().check_exit()
 
 
 class IStateStoppingLoss(State):
@@ -282,30 +321,33 @@ class Instance(ABC):
             self._state = state(**state_args)
 
     def run(self):
-        # new_state_args is a dict of args to be handed to new_state on instantiation
-        instance_action, new_state, new_state_args = self._state.check_exit()
-        if instance_action == State.STATE_STAY:
-            log.log(9, "STATE_STAY")
-            return
-        elif instance_action == State.STATE_MOVE:
-            log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
-            self.state = new_state
-            return
-        elif instance_action == State.STATE_SPLIT:
-            log.log(9, "STATE_SPLIT")
-            # to split means to leave this instance where it is, and spawn a new instance at
-            # whatever the next state is
-            # for example, a partial fill on a limit buy. in that case, the existing instance would continue on until 100% fill or cancel
-            # but a new instance would be spawned to handle the partially filled units
-            # to do that, it needs to know how many got filled
-            # and it needs a copy of the order so it knows details like order type, filled price etc
-            # new instance is instantiated using fill information from broker api, gets a new sub-identifier and gets a new telemetry object
-            # new instance continues on
-            # TODO which instance owns the fees?
-            self.parent_controller.fork_instance(self, new_state, **new_state_args)
+        # loop until the answer comes back to stay put
+        while True:
+            # new_state_args is a dict of args to be handed to new_state on instantiation
+            instance_action, new_state, new_state_args = self._state.check_exit()
+            if instance_action == State.STATE_STAY:
+                log.log(9, "STATE_STAY")
+                break
 
-        else:
-            raise NotImplementedError("This should never happen...")
+            elif instance_action == State.STATE_MOVE:
+                log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
+                self.state = new_state
+
+            elif instance_action == State.STATE_SPLIT:
+                log.log(9, "STATE_SPLIT")
+                # to split means to leave this instance where it is, and spawn a new instance at
+                # whatever the next state is
+                # for example, a partial fill on a limit buy. in that case, the existing instance would continue on until 100% fill or cancel
+                # but a new instance would be spawned to handle the partially filled units
+                # to do that, it needs to know how many got filled
+                # and it needs a copy of the order so it knows details like order type, filled price etc
+                # new instance is instantiated using fill information from broker api, gets a new sub-identifier and gets a new telemetry object
+                # new instance continues on
+                # TODO which instance owns the fees?
+                self.parent_controller.fork_instance(self, new_state, **new_state_args)
+
+            else:
+                raise NotImplementedError("This should never happen...")
 
     @property
     def state(self):
