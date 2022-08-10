@@ -78,11 +78,12 @@ class MacdInstanceTemplate(InstanceTemplate):
         self,
         name: str,
         buy_signal_strength: float,
-        take_profit_trigger_pct_of_risk: float,
+        take_profit_risk_multiplier: float,
         take_profit_pct_to_sell: float,
         stop_loss_trigger_pct: float,
         stop_loss_type: str = "market",
         stop_loss_hold_intervals: int = 1,
+        buy_order_type: str = "limit",
         buy_timeout_intervals: int = 2,
         check_sma: bool = True,
         sma_comparison_period: int = 20,
@@ -90,7 +91,8 @@ class MacdInstanceTemplate(InstanceTemplate):
         super().__init__(
             name=name,
             buy_signal_strength=buy_signal_strength,
-            take_profit_trigger_pct_of_risk=take_profit_trigger_pct_of_risk,
+            buy_order_type=buy_order_type,
+            take_profit_risk_multiplier=take_profit_risk_multiplier,
             take_profit_pct_to_sell=take_profit_pct_to_sell,
             stop_loss_trigger_pct=stop_loss_trigger_pct,
             stop_loss_type=stop_loss_type,
@@ -173,7 +175,7 @@ class MacdStateWaiting(IStateWaiting):
         )
 
         # put stop loss in to instance
-        self.stop_loss_price = stop_loss_unit
+        self.parent_instance.stop_loss_price = stop_loss_unit
 
         super().do_exit()
 
