@@ -92,22 +92,7 @@ class State(ABC):
         self.symbol_str = config_source.symbol_str
         self.ohlc = config_source.symbol.ohlc
         self.config = config_source.config
-        self.broker = config_source.broker
         self.controller = self.parent_instance.parent_controller
-
-        # self.ohlc = parent_instance.ohlc
-
-    # @property
-    # def ohlc(self) -> SymbolData:
-    #    return self.parent_instance.ohlc
-
-    # @property
-    # def config(self) -> InstanceTemplate:
-    #    return self.parent_instance.config
-
-    # @ohlc.setter
-    # def ohlc(self, ohlc_source):
-    #    self.ohlc = ohlc_source
 
     @abstractmethod
     def check_exit(self):
@@ -123,6 +108,7 @@ class State(ABC):
     def __repr__(self) -> str:
         return self.__class__.__name__
 
+    # TODO why did i do this?
     @property
     def stop_loss_price(self):
         raise Exception("dont do this")
@@ -195,14 +181,13 @@ class IStateEnteringPosition(State):
 
         try:
             if order_type == "limit":
-                order = self.broker.buy_order_limit(
-                    symbol=self.symbol_str, units=aligned_units, unit_price=aligned_limit_price
+                order = self.parent_instance.buy_limit(
+                    units=aligned_units, unit_price=aligned_limit_price
                 )
             else:
-                order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
+                order = self.parent_instance.buy_market(units=units)
 
             # hold on to the order result object for further inspection in check_exit and do_exit
-            self.order = order
             self.intervals_until_timeout = self.config.buy_timeout_intervals
 
         except Exception as e:
@@ -214,10 +199,10 @@ class IStateEnteringPosition(State):
 
         # check if order is still open / dead / partially filled
         # depending on this, return different options
-        order_id = self.order.order_id
+        order_id = self.parent_instance.buy_order.order_id
 
         # get the order from the broker
-        order = self.broker.get_order(order_id)
+        order = self.parent_instance.get_order(order_id)
 
         # TODO status summary needs to cater for partial fills, and then this logic does too
         if order.status_summary == "filled":
@@ -250,35 +235,56 @@ class IStateEnteringPosition(State):
 
 class IStateTakingProfit(State):
     @abstractmethod
-    def __init__(self, previous_state: State, parent_instance=None) -> None:
+    def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
-        # need to submit a take profit order straight away
-        # units to sell = config sell pct * units held
-        sell_pct = self.config.take_profit_pct_to_sell
-        held = self.parent_instance.units_held
-        units_to_sell_unaligned = sell_pct * held
-        units_to_sell = self.symbol.align_quantity_increment(units_to_sell_unaligned)
+        # need to submit a take profit order at init
 
-        # risk = entry unit price - stop unit price
-        entry_unit = self.parent_instance.entry_price
-        stop_unit = self.parent_instance.stop_loss_price
-        risk_unit = entry_unit - stop_unit
+        if kwargs.get("units_to_sell", None):
+            units_to_sell = kwargs["units_to_sell"]
+        else:
+            # units to sell = config sell pct * units held
+            units_to_sell = self._default_units_to_sell()
 
-        # target profit = 1.5 * risk
-        trigger_risk_multiplier = self.config.take_profit_risk_multiplier
-        target_unit_profit = trigger_risk_multiplier * risk_unit
-
-        # target price = entry price + target profit
-        target_unit_unaligned = entry_unit + target_unit_profit
-        target_unit = self.symbol.align_price(target_unit_unaligned)
+        if kwargs.get("target_unit", None):
+            target_unit = kwargs["target_unit"]
+        else:
+            target_unit = self._default_unit_price()
 
         # TODO add validation - zero units, zero price, price lower than buy price
 
         sell_order = self.parent_instance.sell_limit(units=units_to_sell, unit_price=target_unit)
 
+    def _default_units_to_sell(self):
+        sell_pct = self.config.take_profit_pct_to_sell
+        held = self.parent_instance.units_held
+        units_to_sell_unaligned = sell_pct * held
+        units_to_sell = self.symbol.align_quantity_increment(units_to_sell_unaligned)
+        return units_to_sell
+
+    def _default_unit_price(self):
+        # risk = entry unit price - stop unit price
+        entry_unit = self.parent_instance.entry_price
+        stop_unit = self.parent_instance.stop_loss_price
+        risk_unit = entry_unit - stop_unit
+        multiplier = self.parent_instance.take_profit_multiplier
+
+        # target profit = 1.5 * risk * number of times we've taken profit already
+        trigger_risk_multiplier = self.config.take_profit_risk_multiplier
+        target_unit_profit = trigger_risk_multiplier * risk_unit * multiplier
+
+        # target price = entry price + target profit
+        target_unit_unaligned = entry_unit + target_unit_profit
+        target_unit = self.symbol.align_price(target_unit_unaligned)
+
+        return target_unit
+
     def check_exit(self):
+        # TODO this bit next
         return super().check_exit()
+
+    def do_exit(self):
+        return super().do_exit()
 
 
 class IStateStoppingLoss(State):
@@ -297,10 +303,10 @@ class IStateTerminated(State):
         # previous state has an order that might still be open
         if hasattr(previous_state, "order"):
             order_id = previous_state.order.order_id
-            order = self.broker.get_order(order_id)
+            order = self.parent_instance.get_order(order_id)
 
             if not order.closed:
-                cancel_order = self.broker.cancel_order(order_id)
+                cancel_order = self.parent_instance.cancel_order(order_id)
 
                 if not cancel_order.closed:
                     raise UnhandledBrokerException(
@@ -385,7 +391,7 @@ class Instance(ABC):
         self._stop_price = None
         self._target_price = None
         self._buy_order = None
-        self._sales_orders = []
+        self._sales_orders = {}
 
         if state == None:
             self._state = play_controller.play_config.state_waiting(parent_instance=self)
@@ -438,15 +444,6 @@ class Instance(ABC):
         self._state = new_state(previous_state=self._state)
         log.log(9, f"successfully set new state to {self._state}")
 
-    # @property
-    # def held_units(self):
-    #    return self._held_units
-
-    # @held_units.setter
-    # def held_units(self, new_units):
-    #    # TODO add in telemetry hook
-    #    self._held_units = new_units
-
     @property
     def stop_loss_price(self):
         return self._stop_price
@@ -463,14 +460,9 @@ class Instance(ABC):
 
     @buy_order.setter
     def buy_order(self, order: IOrderResult):
-        if self._buy_order != None and self._buy_order_id != order.order_id:
+        if self._buy_order != None and self._buy_order.order_id != order.order_id:
             raise BuyOrderAlreadySet(
-                f"Attempted to set buy_order property to {order.order_id}, but it was already set to {self.buy_order_id}"
-            )
-
-        if self._buy_order != None and self._buy_order.closed:
-            raise BuyOrderAlreadySet(
-                f"Attempted to set buy_order property for {order.order_id} after it had already been set and the order closed"
+                f"Attempted to set buy_order property to {order.order_id}, but it was already set to {self._buy_order.order_id}"
             )
 
         if order.closed:
@@ -486,14 +478,42 @@ class Instance(ABC):
     @property
     def units_sold(self):
         units_sold = 0
-        for sale in self._sales_orders:
-            units_solid += sale.filled_unit_quantity
+        for sale_id in self.filled_sales_orders:
+            # units_sold += sale.filled_unit_quantity
+            units_sold += self.filled_sales_orders[sale_id].filled_unit_quantity
 
         return units_sold
 
     @property
+    def open_sales_orders(self):
+        open_orders = {}
+        for sale_id in self._sales_orders:
+            # units_sold += sale.filled_unit_quantity
+            if self._sales_orders[sale_id].closed == False:
+                open_orders[sale_id] = self._sales_orders[sale_id]
+        return open_orders
+
+    @property
+    def filled_sales_orders(self):
+        filled_orders = {}
+        for sale_id in self._sales_orders:
+            # units_sold += sale.filled_unit_quantity
+            if self._sales_orders[sale_id].status_summary == "filled":
+                filled_orders[sale_id] = self._sales_orders[sale_id]
+        return filled_orders
+
+    @property
     def units_held(self):
         return self.units_bought - self.units_sold
+
+    @property
+    def take_profit_multiplier(self):
+        multiplier = 1
+        multiplier += len(self.filled_sales_orders)
+        # for sale_id in self._sales_orders:
+        #    if self._sales_orders[sale_id].status_summary == "filled":
+        #        multiplier + 1
+        return multiplier
 
     @property
     def buy_order_id(self):
@@ -503,29 +523,50 @@ class Instance(ABC):
     def entry_price(self):
         return self._entry_price
 
+    def add_sell_order(self, order: IOrderResult):
+        self._sales_orders[order.order_id] = order
+
     # just basic passthrough
     # TODO telemetry stuff
     def buy_limit(self, units: float, unit_price: float):
-        return self.broker.buy_order_limit(
+        order = self.broker.buy_order_limit(
             symbol=self.symbol_str, units=units, unit_price=unit_price
         )
+        self.buy_order = order
+        return order
 
     def buy_market(self, units: float):
-        return self.broker.buy_order_market(symbol=self.symbol_str, units=units)
+        order = self.broker.buy_order_market(symbol=self.symbol_str, units=units)
+        self.buy_order = order
+        return order
 
     def sell_limit(self, units: float, unit_price: float):
-        return self.broker.sell_order_limit(
+        order = self.broker.sell_order_limit(
             symbol=self.symbol_str, units=units, unit_price=unit_price
         )
+        self.add_sell_order(order)
+        return order
 
     def sell_market(self, units: float):
-        return self.broker.sell_order_market(symbol=self.symbol_str, units=units)
+        order = self.broker.sell_order_market(symbol=self.symbol_str, units=units)
+        self.add_sell_order(order)
+        return order
 
     def cancel_order(self, order_id: str):
-        return self.broker.cancel_order(order_id)
+        cancel_order = self.broker.cancel_order(order_id)
+        # update our cache of orders with this status
+        if cancel_order.order_type_text.find("SELL") > -1:
+            self.add_sell_order(cancel_order)
+
+        return cancel_order
 
     def get_order(self, order_id: str):
-        return self.broker.get_order(order_id)
+        order = self.broker.get_order(order_id)
+        # update our cache of orders with this status
+        if order.order_type_text.find("SELL") > -1:
+            self.add_sell_order(order)
+
+        return order
 
 
 class Controller(ABC):
