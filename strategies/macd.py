@@ -1,5 +1,3 @@
-from audioop import cross
-from tabnanny import check
 from core.abstracts import (
     IStateWaiting,
     IStateEnteringPosition,
@@ -241,11 +239,12 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
 
 class MacdStateTakingProfit(IStateTakingProfit):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
+        # if you're going to override the take profit units or price, do it before calling super init
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return State.STATE_MOVE, MacdStateStoppingLoss, {}
+        return super().check_exit()
 
     def do_exit(self):
         log.log(9, f"doing exit on {self}")

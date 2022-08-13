@@ -1,4 +1,4 @@
-from broker_api import alpaca
+from broker_api import alpaca, back_test
 from parameter_store.ssm import Ssm
 
 from strategies.macd import (
@@ -23,17 +23,20 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
+level = logging.WARNING
 log = logging.getLogger(__name__)
-log.setLevel(logging.DEBUG)
-logging.getLogger("symbol.symbol_data").setLevel(logging.WARNING)
-logging.getLogger("core.abstracts").setLevel(logging.DEBUG)
-logging.getLogger("strategies.macd").setLevel(logging.DEBUG)
+log.setLevel(level)
+logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)
+logging.getLogger("core.abstracts").setLevel(level)
+logging.getLogger("strategies.macd").setLevel(level)
+logging.getLogger("broker_api.back_test").setLevel(level)
 
+# TODO stop loss signal at high/low/close
 play_template_1 = MacdInstanceTemplate(
     name="template1",
     buy_signal_strength=1,
     buy_timeout_intervals=2,
-    buy_order_type="market",
+    buy_order_type="limit",
     take_profit_risk_multiplier=1.5,
     take_profit_pct_to_sell=0.5,
     stop_loss_type="market",
@@ -69,14 +72,18 @@ _PREFIX = "tabot"
 api_key = store.get(f"/{_PREFIX}/paper/alpaca/api_key")
 security_key = store.get(f"/{_PREFIX}/paper/alpaca/security_key")
 
-broker = alpaca.AlpacaAPI(
-    alpaca_key_id=api_key,
-    alpaca_secret_key=security_key,
-)
+# broker = alpaca.AlpacaAPI(
+#    alpaca_key_id=api_key,
+#    alpaca_secret_key=security_key,
+# )
+
+broker = back_test.BackTestAPI(sell_metric="High", buy_metric="Low")
 
 symbol = Symbol(
-    yf_symbol="DOGE-USD", back_testing=True
+    yf_symbol="DOGE-USD", min_price_increment=0.00001, back_testing=True
 )  # need to do api calls to generate increments etc
+
+broker._put_symbol(symbol)
 
 symbol.ohlc.apply_ta(btalib.sma)
 symbol.ohlc.apply_ta(MacdTA.macd)
@@ -85,7 +92,7 @@ current_interval_key = 3500
 # current_interval = symbol.ohlc.bars.index[current_interval_key]
 bar_len = len(symbol.ohlc.bars)
 
-symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
+symbol.period = symbol.ohlc.bars.index[current_interval_key]
 
 controller = Controller(symbol, play_config, broker)  # also creates a play telemetry object
 controller.start_play()
@@ -100,7 +107,9 @@ while current_interval_key <= bar_len:
     current_interval_key += 1
 
     # TODO need an object to track the ticks
-    symbol.ohlc.set_period(symbol.ohlc.bars.index[current_interval_key])
+    next_period = symbol.ohlc.bars.index[current_interval_key]
+    symbol.period = next_period
+    broker.period = next_period
 
 # so who decides the wait period?
 # InstanceController? but then how do multiple symbols run in parallel

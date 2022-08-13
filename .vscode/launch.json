@@ -11,6 +11,14 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "example.py",
+            "type": "python",
+            "request": "launch",
+            "program": "example.py",
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }
