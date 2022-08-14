@@ -125,13 +125,13 @@ class MacdStateWaiting(IStateWaiting):
 
         if signal_found:
             # all conditions met for a buy
-            log.info(
+            self.log.info(
                 f"{self.symbol_str}: FOUND BUY SIGNAL AT {row.name} (MACD {round(row.macd_macd,4)} vs "
                 f"signal {round(row.macd_signal,4)}, SMA LAST {round(last_sma,4)} vs AVG {round(recent_average_sma,4)})"
             )
             return State.STATE_MOVE, MacdStateEnteringPosition, {}
 
-        log.log(
+        self.log.log(
             9,
             f"{self.symbol_str}: No buy signal at {df.index[-1]} (MACD {round(row.macd_macd,4)} vs signal "
             f"{round(row.macd_signal,4)}, SMA {round(last_sma,4)} vs {round(recent_average_sma,4)}",
@@ -161,12 +161,12 @@ class MacdStateWaiting(IStateWaiting):
 
         intervals_since_stop = MacdStateWaiting.count_intervals(df=df, start_date=stop_unit_date)
 
-        log.log(
+        self.log.log(
             logging.DEBUG,
             f"{self.symbol}: Last cycle started on {red_cycle_start}, "
             f"{intervals_since_stop} intervals ago",
         )
-        log.log(
+        self.log.log(
             logging.DEBUG,
             f"{self.symbol}: The lowest price during that cycle was {stop_loss_unit} "
             f"on {stop_unit_date}. This will be used as the stop loss for this instance",

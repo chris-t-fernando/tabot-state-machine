@@ -121,12 +121,16 @@ class State(ABC):
 
 
 class IStateWaiting(State):
+    _cls_str = "IStateWaiting"
+
     @abstractmethod
     def __init__(self, previous_state: State, parent_instance=None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
 class IStateEnteringPosition(State):
+    _cls_str = "IStateEnteringPosition"
+
     @abstractmethod
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
@@ -241,7 +245,7 @@ class IStateEnteringPosition(State):
             _filled_units = order.filled_unit_quantity
             _filled_price = order.filled_unit_price
             self.log.info(
-                f"{_order_type} order ID {order_id} for {_filled_units} at {_filled_price} has been filled, moving to {taking_profit_state}"
+                f"{_order_type} order ID {order_id} for {_filled_units} at {_filled_price} has been filled, moving to {taking_profit_state.__name__}"
             )
 
             return State.STATE_MOVE, taking_profit_state, {}
@@ -252,7 +256,7 @@ class IStateEnteringPosition(State):
             if self.intervals_until_timeout == 0:
                 terminated_state = self.controller.play_config.state_terminated
                 log.info(
-                    f"{self.parent_instance}: Order ID {order_id} has timed out, moving to {terminated_state}"
+                    f"{self.parent_instance}: Order ID {order_id} has timed out, moving to {terminated_state.__name__}"
                 )
                 return State.STATE_MOVE, terminated_state, {}
 
@@ -267,7 +271,7 @@ class IStateEnteringPosition(State):
         elif order.status_summary == "cancelled":
             terminated_state = self.controller.play_config.state_terminated
             log.info(
-                f"{self.parent_instance}: Order ID {order_id} has been cancelled, moving to {terminated_state}"
+                f"{self.parent_instance}: Order ID {order_id} has been cancelled, moving to {terminated_state.__name__}"
             )
             return State.STATE_MOVE, terminated_state, {}
 
@@ -282,21 +286,23 @@ class IStateTakingProfit(State):
 
         if kwargs.get("units_to_sell", None):
             units_to_sell = kwargs["units_to_sell"]
-            log.log(9, f"Finding units to sell via class {self}")
+            self.log.log(9, f"Finding units to sell via class {self}")
         else:
             units_to_sell = self._default_units_to_sell()
-            log.log(9, f"Finding units to sell via default base class")
+            self.log.log(9, f"Finding units to sell via default base class")
 
         if kwargs.get("target_unit", None):
             target_unit = kwargs["target_unit"]
-            log.log(9, f"Finding unit target price to sell via class {self}")
+            self.log.log(9, f"Finding unit target price to sell via class {self}")
         else:
             target_unit = self._default_unit_price()
-            log.log(9, f"Finding unit price via default base class")
+            self.log.log(9, f"Finding unit price via default base class")
 
         # TODO add validation - zero units, zero price, price lower than buy price
         sell_order = self.parent_instance.sell_limit(units=units_to_sell, unit_price=target_unit)
-        log.debug(f"Sell limit order submitted for {units_to_sell} units at {target_unit}")
+        self.log.info(
+            f"Sell limit order ID {sell_order.order_id} submitted for {units_to_sell} units at {target_unit}"
+        )
 
     def _default_units_to_sell(self):
         sell_pct = self.config.take_profit_pct_to_sell
@@ -315,7 +321,7 @@ class IStateTakingProfit(State):
         if risk_unit < 0:
             # not great hack - happens when you do a buy market and the spread sucks
             risk_unit = self.symbol.align_price(stop_unit - entry_unit)
-            log.error(
+            self.log.error(
                 f"Base class unit price default: Risk unit is < 0 - probably because the Market buy filled unit price is lower than the set stop loss price. Overrode to {risk_unit}"
             )
             # raise InvalidTakeProfit(f"Target price of {} is lower than stop")
@@ -347,29 +353,29 @@ class IStateTakingProfit(State):
             # filled but don't hold any more, so bail
             if self.parent_instance.units_held == 0:
                 terminated_state = self.controller.play_config.state_terminated
-                log.info(
-                    f"Take profit order ID {sale_id} has been filled. No units still held, so moving to state {terminated_state}"
+                self.log.info(
+                    f"Take profit order ID {sale_id} has been filled. No units still held, so moving to state {terminated_state.__name__}"
                 )
                 return State.STATE_MOVE, terminated_state, {}
 
             # filled and still hold more, so take profit again
             taking_profit_state = self.controller.play_config.state_taking_profit
-            log.info(
-                f"Take profit order ID {sale_id} has been filled, repeating state {taking_profit_state}"
+            self.log.info(
+                f"Take profit order ID {sale_id} has been filled, repeating state {taking_profit_state.__name__}"
             )
             return State.STATE_MOVE, taking_profit_state, {}
 
         elif sale_status == "cancelled":
             # something happened - what do we do?
             terminated_state = self.controller.play_config.state_terminated
-            log.error(
-                f"{self.parent_instance}: Take profit order ID {sale_id} has been cancelled outside of state machine control, moving to {terminated_state}"
+            self.log.error(
+                f"{self.parent_instance}: Take profit order ID {sale_id} has been cancelled outside of state machine control, moving to {terminated_state.__name__}"
             )
             return State.STATE_MOVE, terminated_state, {}
 
         else:
             last_close = self.symbol.align_price(self.parent_instance.ohlc.get_latest().Close)
-            log.log(
+            self.log.log(
                 9,
                 f"Take profit order ID {sale_id} is still open (target price {order.ordered_unit_price} vs last close {last_close}), staying in state {self}",
             )
@@ -388,8 +394,8 @@ class IStateStoppingLoss(State):
     def check_exit(self):
         super().check_exit()
         terminated_state = self.controller.play_config.state_terminated
-        log.debug(
-            f"{self.parent_instance}: No default clean activities, moving straight to {terminated_state}"
+        self.log.debug(
+            f"{self.parent_instance}: No default clean activities, moving straight to {terminated_state.__name__}"
         )
         return State.STATE_MOVE, terminated_state, {}
 
@@ -418,7 +424,7 @@ class IStateTerminated(State):
                 cancel_orders.append(self.parent_instance.open_sales_order.order_id)
 
         # cancel orders
-        log.debug(f"Found {len(cancel_orders)} open orders to cancel")
+        self.log.debug(f"Found {len(cancel_orders)} open orders to cancel")
         for _order_id in cancel_orders:
             cancel_order = self.parent_instance.cancel_order(_order_id)
 
@@ -426,14 +432,16 @@ class IStateTerminated(State):
                 raise UnhandledBrokerException(
                     f"Failed to cancel {cancel_order.order_type_text} order ID {_order_id}. State is {cancel_order.status_text}"
                 )
-            log.debug(f"Successfully cancelled order {_order_id}")
+            self.log.debug(f"Successfully cancelled order {_order_id}")
 
-        log.info(f"Successfully cancelled {len(cancel_orders)} orders")
+        self.log.info(f"Successfully cancelled {len(cancel_orders)} orders")
 
         # if the instance still holds units, liquidate them
         if self.parent_instance.units_held > 0:
             # validate it, just in case
-            log.debug(f"Instance still holds {self.parent_instance.units_held} units - liquidating")
+            self.log.debug(
+                f"Instance still holds {self.parent_instance.units_held} units - liquidating"
+            )
             units = self.symbol.align_quantity_increment(self.parent_instance.units_held)
             liquidate_order = self.parent_instance.sell_market(units)
 
@@ -444,10 +452,15 @@ class IStateTerminated(State):
                     f"Failed to {order.order_type_text} {units} units. Order ID was {liquidate_id}. State is {liquidate_status}"
                 )
 
-            log.info(
+            self.log.info(
                 f"Successfully liquidated instance holding of {liquidate_order.filled_unit_quantity} units"
             )
 
+        bought = self.parent_instance.total_sell_value
+        sold = self.parent_instance.total_buy_value
+        gained = sold - bought
+        self.log.info(f"Bought value: {bought} Sold value: {sold} Total gain: {gained}")
+        self.log.info(f"Finished terminating this instance")
         self.parent_instance.handler.close()
 
 
@@ -517,13 +530,14 @@ class Instance(ABC):
         self._buy_order = None
         self._active_sales_order = None
         self._sales_orders = {}
-        log_name = f"{self.symbol_str}-{self.config.name}"
+        log_group = f"{self.symbol_str}-{self.config.name}"
         stream_name = self._generate_id()
-        self.log = logging.getLogger(f"{log_name}-{stream_name}")
+        self.id = f"{log_group}-{stream_name}"
+        self.log = logging.getLogger(self.id)
         self.log.propagate = False
         formatter = logging.Formatter("%(asctime)s : %(levelname)s - %(message)s")
         self.handler = cloudwatch.CloudwatchHandler(
-            log_group=log_name, log_stream=stream_name, retention_period=7
+            log_group=log_group, log_stream=stream_name, retention_period=7
         )
         self.handler.setFormatter(formatter)
         self.log.setLevel(logging.DEBUG)
@@ -534,6 +548,9 @@ class Instance(ABC):
         else:
             self._state = state(**state_args)
 
+    def __repr__(self):
+        return self.id
+
     def _generate_id(self, length: int = 6):
         return "instance-" + uuid.uuid4().hex[:length].upper()
 
@@ -543,15 +560,15 @@ class Instance(ABC):
             # new_state_args is a dict of args to be handed to new_state on instantiation
             instance_action, new_state, new_state_args = self._state.check_exit()
             if instance_action == State.STATE_STAY:
-                log.log(9, "STATE_STAY")
+                self.log.log(9, "STATE_STAY")
                 break
 
             elif instance_action == State.STATE_MOVE:
-                log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
+                self.log.log(9, f"STATE_MOVE from {self.state} to {new_state}")
                 self.state = new_state
 
             elif instance_action == State.STATE_SPLIT:
-                log.log(9, "STATE_SPLIT")
+                self.log.log(9, "STATE_SPLIT")
                 # to split means to leave this instance where it is, and spawn a new instance at
                 # whatever the next state is
                 # for example, a partial fill on a limit buy. in that case, the existing instance would continue on until 100% fill or cancel
@@ -574,14 +591,14 @@ class Instance(ABC):
     def state(self, new_state):
         if not isinstance(new_state, type):
             _msg = f"Specified state '{new_state}' must be a class"
-            log.error(_msg)
+            self.log.error(_msg)
             raise RuntimeError(_msg)
 
         self._state.do_exit()
-        log.log(9, f"do_exit() successful on {self._state}")
+        self.log.log(9, f"do_exit() successful on {self._state}")
 
         self._state = new_state(previous_state=self._state)
-        log.log(9, f"successfully set new state to {self._state}")
+        self.log.log(9, f"successfully set new state to {self._state}")
 
     @property
     def stop_loss_price(self):
@@ -626,7 +643,7 @@ class Instance(ABC):
         return units_sold
 
     @property
-    def total_spent(self):
+    def total_sell_value(self):
         if not self.buy_order:
             return 0
 
@@ -636,7 +653,7 @@ class Instance(ABC):
         return self.buy_order.filled_total_value
 
     @property
-    def total_earned(self):
+    def total_buy_value(self):
         earned = 0
         for order_id, order in self._sales_orders.items():
             if order.filled_total_value:
@@ -645,10 +662,8 @@ class Instance(ABC):
 
     @property
     def total_gain(self):
-        gain = self.total_earned - self.total_spent
-        if gain < -150:
-            print("bananas")
-        return self.total_earned - self.total_spent
+        gain = self.total_buy_value - self.total_sell_value
+        return gain
 
     @property
     def open_sales_order(self):
@@ -683,11 +698,11 @@ class Instance(ABC):
     def stop_loss_triggered(self):
         last_close = self.symbol.align_price(self.ohlc.get_latest().Close)
         if last_close < self.stop_loss_price:
-            log.warning(
+            self.log.warning(
                 f"Stop loss triggered. Last close was {last_close} vs stop loss of {self.stop_loss_price}"
             )
             return True
-        log.log(
+        self.log.log(
             9,
             f"Stop loss was not triggered. Last close was {last_close} vs stop loss of {self.stop_loss_price}",
         )
@@ -820,12 +835,11 @@ class Controller(ABC):
         return "play-" + self.symbol.yf_symbol + uuid.uuid4().hex[:length].upper()
 
     @property
-    def gain(self):
+    def total_gain(self):
         gain = 0
         for i in self.instances:
-            if i.total_earned != 0:
+            if i.total_buy_value != 0:
                 gain += i.total_gain
-                # print(f"\t\t{i}\t{i.total_gain}")
             else:
                 log.debug(
                     f"Ignoring instance {i} since it has not taken profit or stopped loss yet"
@@ -843,7 +857,7 @@ class Controller(ABC):
                 # if this instance is terminated, spin up a new one
                 self.terminated_instances.append(i)
                 new_instances.append(self.play_instance_class(i.config, self))
-                gain = self.gain
+                gain = self.total_gain
                 print(f"Total gain for this symbol: {gain:,.2f}")
 
             else:
@@ -873,6 +887,4 @@ class Controller(ABC):
 
 
 # TODO
-# split logging
-# ingest logging to CloudWatch
 # create Orchestrator
