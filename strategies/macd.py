@@ -246,9 +246,9 @@ class MacdStateTakingProfit(IStateTakingProfit):
         log.log(9, f"checking exit on {self}")
         return super().check_exit()
 
-    def do_exit(self):
-        log.log(9, f"doing exit on {self}")
-        return
+    # def do_exit(self):
+    #    log.log(9, f"doing exit on {self}")
+    #    return super().do_exit()
 
 
 class MacdStateStoppingLoss(IStateStoppingLoss):
@@ -257,11 +257,7 @@ class MacdStateStoppingLoss(IStateStoppingLoss):
 
     def check_exit(self):
         log.log(9, f"checking exit on {self}")
-        return State.STATE_MOVE, MacdStateTerminated, {}
-
-    def do_exit(self):
-        log.log(9, f"doing exit on {self}")
-        return
+        return super().check_exit()
 
 
 class MacdStateTerminated(IStateTerminated):

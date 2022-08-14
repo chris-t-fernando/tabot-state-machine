@@ -23,7 +23,7 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
-level = logging.WARNING
+level = logging.DEBUG
 log = logging.getLogger(__name__)
 log.setLevel(level)
 logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)

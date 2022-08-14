@@ -1,3 +1,4 @@
 git+https://github.com/chris-t-fernando/symbol-cache.git 
 git+https://github.com/chris-t-fernando/broker-api.git
 git+https://github.com/chris-t-fernando/parameter-store.git
+cloudwatch
