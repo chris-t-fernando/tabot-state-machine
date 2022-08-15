@@ -116,3 +116,8 @@ while current_interval_key <= bar_len:
 # from here? then InstanceController can just make a call to get latest, without knowing why it was called again?
 # otherwise i could make it so that each instancecontroller is its own process, and each can sleep as long as it wants
 # that would make startup and shutdown a lot faster. might get into issues with request throttling though?
+
+
+# TODO
+# build an Orchestrator
+# fix the logic above to simplify backtesting vs not

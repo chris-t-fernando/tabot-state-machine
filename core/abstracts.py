@@ -186,7 +186,7 @@ class IStateEnteringPosition(State):
             units = budget / last_price
             self.log.debug(f"No units set, using default calculation. Unaligned units: {units}")
             log_extras["default_unit_quantity"] = True
-            log_extras["units"] = units
+            log_extras["units_raw"] = units
 
         if not self.symbol.notional_units:
             log_extras["notional"] = False
@@ -246,7 +246,8 @@ class IStateEnteringPosition(State):
         log_extras["order_status_summary"] = order.status_summary
         log_extras["order_status_detail"] = order.status_text
         log_extras["order_timeout"] = self.config.buy_timeout_intervals
-        self.log.info(f"Buy order submitted", extra=sort(log_extras))
+
+        self.log.info(f"Buy order submitted", state_parameters=log_extras, order=order.as_dict())
 
     def check_exit(self):
         super().check_exit()
@@ -263,23 +264,9 @@ class IStateEnteringPosition(State):
             # fully filled
             self.parent_instance.buy_order = order
             taking_profit_state = self.controller.play_config.state_taking_profit
+            log_extras = {"next_state": taking_profit_state.__name__}
             self.log.info(
-                f"Buy order filled",
-                extra=sort(
-                    {
-                        "order_id": order_id,
-                        "order_type": order.order_type_text,
-                        "order_status_summary": order.status_summary,
-                        "order_status_detail": order.status_text,
-                        "ordered_unit_quantity": order.ordered_unit_quantity,
-                        "ordered_unit_price": order.ordered_unit_price,
-                        "ordered_total_value": order.ordered_total_value,
-                        "filled_unit_quantity": order.filled_unit_quantity,
-                        "filled_unit_price": order.filled_unit_price,
-                        "filled_total_value": order.filled_total_value,
-                        "next_state": {taking_profit_state.__name__},
-                    }
-                ),
+                f"Buy order submitted", state_parameters=log_extras, order=order.as_dict()
             )
 
             return State.STATE_MOVE, taking_profit_state, {}
@@ -292,23 +279,9 @@ class IStateEnteringPosition(State):
                 self.log.info(
                     f"{self.parent_instance}: Order ID {order_id} has timed out, moving to {terminated_state.__name__}"
                 )
+                log_extras = {"next_state": terminated_state.__name__}
                 self.log.info(
-                    "Buy order timed out",
-                    extra=sort(
-                        {
-                            "order_id": order_id,
-                            "order_type": order.order_type_text,
-                            "order_status_summary": order.status_summary,
-                            "order_status_detail": order.status_text,
-                            "ordered_unit_quantity": order.ordered_unit_quantity,
-                            "ordered_unit_price": order.ordered_unit_price,
-                            "ordered_total_value": order.ordered_total_value,
-                            "filled_unit_quantity": order.filled_unit_quantity,
-                            "filled_unit_price": order.filled_unit_price,
-                            "filled_total_value": order.filled_total_value,
-                            "next_state": {terminated_state.__name__},
-                        }
-                    ),
+                    f"Buy order timed out", state_parameters=log_extras, order=order.as_dict()
                 )
                 return State.STATE_MOVE, terminated_state, {}
 
@@ -318,24 +291,8 @@ class IStateEnteringPosition(State):
                 self.log.info(
                     f"Order ID {order_id} is still in state {order.status_summary}. Last close {last_close} vs entry price {entry_price}"
                 )
-                self.log.info(
-                    "Buy order still open",
-                    extra=sort(
-                        {
-                            "order_id": order_id,
-                            "order_type": order.order_type_text,
-                            "order_status_summary": order.status_summary,
-                            "order_status_detail": order.status_text,
-                            "ordered_unit_quantity": order.ordered_unit_quantity,
-                            "ordered_unit_price": order.ordered_unit_price,
-                            "ordered_total_value": order.ordered_total_value,
-                            "filled_unit_quantity": order.filled_unit_quantity,
-                            "filled_unit_price": order.filled_unit_price,
-                            "filled_total_value": order.filled_total_value,
-                            "next_state": None,
-                        }
-                    ),
-                )
+                self.log.info("Buy order still open", order=order.as_dict())
+
                 return State.STATE_STAY, None, {}
 
         elif order.status_summary == "cancelled":
@@ -343,24 +300,11 @@ class IStateEnteringPosition(State):
             log.info(
                 f"{self.parent_instance}: Order ID {order_id} has been cancelled, moving to {terminated_state.__name__}"
             )
+            log_extras = {"next_state": terminated_state.__name__}
             self.log.info(
-                "Buy order still open",
-                extra=sort(
-                    {
-                        "order_id": order_id,
-                        "order_type": order.order_type_text,
-                        "order_status_summary": order.status_summary,
-                        "order_status_detail": order.status_text,
-                        "ordered_unit_quantity": order.ordered_unit_quantity,
-                        "ordered_unit_price": order.ordered_unit_price,
-                        "ordered_total_value": order.ordered_total_value,
-                        "filled_unit_quantity": order.filled_unit_quantity,
-                        "filled_unit_price": order.filled_unit_price,
-                        "filled_total_value": order.filled_total_value,
-                        "next_state": {terminated_state.__name__},
-                    }
-                ),
+                "Buy order still open", state_parameters=log_extras, order=order.as_dict()
             )
+
             return State.STATE_MOVE, terminated_state, {}
 
         else:
@@ -389,23 +333,11 @@ class IStateTakingProfit(State):
         # TODO add validation - zero units, zero price, price lower than buy price
         sell_order = self.parent_instance.sell_limit(units=units_to_sell, unit_price=target_unit)
 
+        log_extras = {"held_units": self.parent_instance.units_held}
         self.log.info(
             "Take profit sell order submitted",
-            extra=sort(
-                {
-                    "order_id": sell_order.order_id,
-                    "order_type": sell_order.order_type_text,
-                    "order_status_summary": sell_order.status_summary,
-                    "order_status_detail": sell_order.status_text,
-                    "ordered_unit_quantity": sell_order.ordered_unit_quantity,
-                    "ordered_unit_price": sell_order.ordered_unit_price,
-                    "ordered_total_value": sell_order.ordered_total_value,
-                    "filled_unit_quantity": sell_order.filled_unit_quantity,
-                    "filled_unit_price": sell_order.filled_unit_price,
-                    "filled_total_value": sell_order.filled_total_value,
-                    "held_units": self.parent_instance.units_held,
-                }
-            ),
+            state_parameters=log_extras,
+            order=sell_order.as_dict(),
         )
 
     def _default_units_to_sell(self):
@@ -443,7 +375,6 @@ class IStateTakingProfit(State):
     def check_exit(self):
         super().check_exit()
 
-        # TODO this bit next
         # check that stop loss hasn't been hit first
         if self.parent_instance.stop_loss_triggered():
             stop_loss_state = self.controller.play_config.state_stopping_loss
@@ -457,96 +388,52 @@ class IStateTakingProfit(State):
             # filled but don't hold any more, so bail
             if self.parent_instance.units_held == 0:
                 terminated_state = self.controller.play_config.state_terminated
+                log_extras = {
+                    "held_units": self.parent_instance.units_held,
+                    "next_state": terminated_state.__name__,
+                }
                 self.log.info(
-                    f"Take profit order filled",
-                    extra=sort(
-                        {
-                            "order_id": order.order_id,
-                            "order_type": order.order_type_text,
-                            "order_status_summary": order.status_summary,
-                            "order_status_detail": order.status_text,
-                            "ordered_unit_quantity": order.ordered_unit_quantity,
-                            "ordered_unit_price": order.ordered_unit_price,
-                            "ordered_total_value": order.ordered_total_value,
-                            "filled_unit_quantity": order.filled_unit_quantity,
-                            "filled_unit_price": order.filled_unit_price,
-                            "filled_total_value": order.filled_total_value,
-                            "held_units": self.parent_instance.units_held,
-                            "next_state": terminated_state.__name__,
-                        }
-                    ),
+                    f"Take profit order filled", state_parameters=log_extras, order=order.as_dict()
                 )
 
                 return State.STATE_MOVE, terminated_state, {}
 
             # filled and still hold more, so take profit again
             taking_profit_state = self.controller.play_config.state_taking_profit
+            log_extras = {
+                "held_units": self.parent_instance.units_held,
+                "next_state": taking_profit_state.__name__,
+            }
             self.log.info(
-                f"Take profit order filled",
-                extra=sort(
-                    {
-                        "order_id": order.order_id,
-                        "order_type": order.order_type_text,
-                        "order_status_summary": order.status_summary,
-                        "order_status_detail": order.status_text,
-                        "ordered_unit_quantity": order.ordered_unit_quantity,
-                        "ordered_unit_price": order.ordered_unit_price,
-                        "ordered_total_value": order.ordered_total_value,
-                        "filled_unit_quantity": order.filled_unit_quantity,
-                        "filled_unit_price": order.filled_unit_price,
-                        "filled_total_value": order.filled_total_value,
-                        "held_units": self.parent_instance.units_held,
-                        "next_state": taking_profit_state.__name__,
-                    }
-                ),
+                f"Take profit order filled", state_parameters=log_extras, order=order.as_dict()
             )
             return State.STATE_MOVE, taking_profit_state, {}
 
         elif sale_status == "cancelled":
             # something happened - what do we do?
             terminated_state = self.controller.play_config.state_terminated
+            log_extras = {
+                "held_units": self.parent_instance.units_held,
+                "next_state": taking_profit_state.__name__,
+            }
             self.log.error(
-                f"Take profit order cancelled",
-                extra=sort(
-                    {
-                        "order_id": order.order_id,
-                        "order_type": order.order_type_text,
-                        "order_status_summary": order.status_summary,
-                        "order_status_detail": order.status_text,
-                        "ordered_unit_quantity": order.ordered_unit_quantity,
-                        "ordered_unit_price": order.ordered_unit_price,
-                        "ordered_total_value": order.ordered_total_value,
-                        "filled_unit_quantity": order.filled_unit_quantity,
-                        "filled_unit_price": order.filled_unit_price,
-                        "filled_total_value": order.filled_total_value,
-                        "held_units": self.parent_instance.units_held,
-                        "next_state": terminated_state.__name__,
-                    }
-                ),
+                f"Take profit order cancelled", state_parameters=log_extras, order=order.as_dict()
             )
             return State.STATE_MOVE, terminated_state, {}
 
         else:
             last_close = self.symbol.align_price(self.parent_instance.ohlc.get_latest().Close)
+            log_extras = {
+                "held_units": self.parent_instance.units_held,
+                "next_state": None,
+                "last_close": last_close,
+            }
+
             self.log.log(
                 9,
                 f"Take profit order still open",
-                extra=sort(
-                    {
-                        "order_id": order.order_id,
-                        "order_type": order.order_type_text,
-                        "order_status_summary": order.status_summary,
-                        "order_status_detail": order.status_text,
-                        "ordered_unit_quantity": order.ordered_unit_quantity,
-                        "ordered_unit_price": order.ordered_unit_price,
-                        "ordered_total_value": order.ordered_total_value,
-                        "filled_unit_quantity": order.filled_unit_quantity,
-                        "filled_unit_price": order.filled_unit_price,
-                        "filled_total_value": order.filled_total_value,
-                        "held_units": self.parent_instance.units_held,
-                        "next_state": None,
-                    }
-                ),
+                state_parameters=log_extras,
+                order=order.as_dict(),
             )
             return State.STATE_STAY, None, {}
 
@@ -601,7 +488,9 @@ class IStateTerminated(State):
                 raise UnhandledBrokerException(
                     f"Failed to cancel {cancel_order.order_type_text} order ID {_order_id}. State is {cancel_order.status_text}"
                 )
-            self.log.debug(f"Successfully cancelled order {_order_id}")
+            self.log.debug(
+                f"Successfully cancelled order {_order_id}", order=cancel_order.as_dict()
+            )
 
         self.log.info(f"Successfully cancelled {len(cancel_orders)} orders")
 
@@ -621,15 +510,15 @@ class IStateTerminated(State):
                     f"Failed to {order.order_type_text} {units} units. Order ID was {liquidate_id}. State is {liquidate_status}"
                 )
 
-            self.log.info(
-                f"Liquidated instance",
-                extra=sort({"liquidated_unit_quantity":liquidate_order.filled_unit_quantity})
-            )
+            self.log.info(f"Liquidated instance", order=liquidate_order.as_dict())
 
         bought = self.parent_instance.total_sell_value
         sold = self.parent_instance.total_buy_value
         gained = sold - bought
-        self.log.info(f"Instance summary", extra=sort({"bought_value": bought, "sold_value": sold, "total_gain": gained}))
+
+        log_extras = {"bought_value": bought, "sold_value": sold, "total_gain": gained}
+
+        self.log.info(f"Instance summary", state_parameters=log_extras)
         self.log.info(f"Instance termination complete")
         self.parent_instance.handler.close()
 
@@ -682,6 +571,90 @@ class ControllerConfig(ABC):
         self.play_templates = play_templates
 
 
+# there is 10000% a better way to do this but python's logging module is a warcrime
+# lord forgive me
+class ShonkyLog:
+    class Decorators:
+        @classmethod
+        def sort(cls, unsorted_dict: dict):
+            sorted_dict = dict(sorted(unsorted_dict.items()))
+            return sorted_dict
+
+        @classmethod
+        def prepare_extras(cls, decorated):
+            def inner(*args, **kwargs):
+                extra_dict = {}
+
+                for k, v in kwargs.items():
+                    extra_dict[k] = ShonkyLog.Decorators.sort(v)
+
+                if len(args) > 2:
+                    extra_dict["other_values"] = []
+
+                for e in args[2:]:
+                    extra_dict["other_values"].append(e)
+
+                return decorated(args[0], message=args[1], _extras=extra_dict)
+
+            return inner
+
+        @classmethod
+        def prepare_extras_log(cls, decorated):
+            def inner(*args, **kwargs):
+                extra_dict = {}
+
+                for k, v in kwargs.items():
+                    extra_dict[k] = ShonkyLog.Decorators.sort(v)
+
+                if len(args) > 3:
+                    extra_dict["other_values"] = []
+
+                for e in args[3:]:
+                    extra_dict["other_values"].append(e)
+
+                return decorated(args[0], level=args[1], message=args[2], _extras=extra_dict)
+
+            return inner
+
+    def __init__(self, log: logging.Logger):
+        self._log = log
+
+    @Decorators.prepare_extras_log
+    def log(
+        self,
+        level,
+        message,
+        _extras=None,
+        *extras,
+        **named_extras,
+    ):
+        self._log.log(level, message, extra=_extras)
+
+    @Decorators.prepare_extras
+    def debug(self, message, *extras, **named_extras):
+        self._log.debug(message, extra=extras)
+
+    @Decorators.prepare_extras
+    def info(self, message, _extras=None, *extras, **named_extras):
+        self._log.info(message, extra=_extras)
+
+    @Decorators.prepare_extras
+    def warning(self, message, _extras=None, *extras, **named_extras):
+        self._log.warning(message, extra=extras)
+
+    @Decorators.prepare_extras
+    def error(self, message, _extras=None, *extras, **named_extras):
+        self._log.error(message, extra=extras)
+
+    @Decorators.prepare_extras
+    def critical(self, message, _extras=None, *extras, **named_extras):
+        self._log.critical(message, extra=extras)
+
+    @Decorators.prepare_extras
+    def exception(self, message, _extras=None, *extras, **named_extras):
+        self._log.exception(message, extra=extras)
+
+
 class Instance(ABC):
     def __init__(
         self, template: InstanceTemplate, play_controller, state=None, state_args=None
@@ -703,8 +676,8 @@ class Instance(ABC):
         log_group = f"{self.symbol_str}-{self.config.name}"
         stream_name = self._generate_id()
         self.id = f"{log_group}-{stream_name}"
-        self.log = logging.getLogger(self.id)
-        self.log.propagate = False
+        instance_log = logging.getLogger(self.id)
+        instance_log.propagate = False
         # formatter = logging.Formatter("%(asctime)s : %(levelname)s - %(message)s")
         format_str = "%(levelname)%(message)"
         formatter = jsonlogger.JsonFormatter(format_str)
@@ -712,8 +685,10 @@ class Instance(ABC):
             log_group=log_group, log_stream=stream_name, retention_period=7
         )
         self.handler.setFormatter(formatter)
-        self.log.setLevel(logging.DEBUG)
-        self.log.addHandler(self.handler)
+        instance_log.setLevel(logging.DEBUG)
+        instance_log.addHandler(self.handler)
+
+        self.log = ShonkyLog(instance_log)
 
         if state == None:
             self._state = play_controller.play_config.state_waiting(parent_instance=self)
@@ -778,7 +753,6 @@ class Instance(ABC):
 
     @stop_loss_price.setter
     def stop_loss_price(self, new_stop_loss_price):
-        # TODO add in telemetry hook
         aligned_stop_price = self.symbol.align_price(new_stop_loss_price)
         self._stop_price = aligned_stop_price
 
@@ -872,7 +846,7 @@ class Instance(ABC):
         if last_close < self.stop_loss_price:
             self.log.warning(
                 f"Stop loss triggered",
-                extra=sort({"last_close": last_close, "stop loss": self.stop_loss_price}),
+                state_parameters={"last_close": last_close, "stop loss": self.stop_loss_price},
             )
             return True
         self.log.log(
@@ -912,7 +886,6 @@ class Instance(ABC):
         self._sales_orders[order.order_id] = order
 
     # just basic passthrough
-    # TODO telemetry stuff
     def buy_limit(self, units: float, unit_price: float):
         order = self.broker.buy_order_limit(
             symbol=self.symbol_str, units=units, unit_price=unit_price
@@ -1057,12 +1030,3 @@ class Controller(ABC):
                 matched_instances.append(i)
 
         return matched_instances
-
-
-def sort(unsorted_dict: dict):
-    sorted_dict = dict(sorted(unsorted_dict.items()))
-    return sorted_dict
-
-
-# TODO
-# create Orchestrator
