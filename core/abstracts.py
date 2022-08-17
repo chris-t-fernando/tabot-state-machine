@@ -6,7 +6,7 @@ import uuid
 import logging
 from math import floor
 from broker_api.ibroker_api import ITradeAPI, IOrderResult
-from cloudwatch import cloudwatch
+from logbeam import CloudWatchLogsHandler
 from pythonjsonlogger import jsonlogger
 
 log = logging.getLogger(__name__)
@@ -678,11 +678,13 @@ class Instance(ABC):
         self.id = f"{log_group}-{stream_name}"
         instance_log = logging.getLogger(self.id)
         instance_log.propagate = False
-        # formatter = logging.Formatter("%(asctime)s : %(levelname)s - %(message)s")
         format_str = "%(levelname)%(message)"
         formatter = jsonlogger.JsonFormatter(format_str)
-        self.handler = cloudwatch.CloudwatchHandler(
-            log_group=log_group, log_stream=stream_name, retention_period=7
+        self.handler = CloudWatchLogsHandler(
+            log_group_name=log_group,
+            log_stream_name=stream_name,
+            buffer_duration=10000,
+            batch_count=100,
         )
         self.handler.setFormatter(formatter)
         instance_log.setLevel(logging.DEBUG)

@@ -97,7 +97,7 @@ symbol.period = symbol.ohlc.bars.index[current_interval_key]
 controller = Controller(symbol, play_config, broker)  # also creates a play telemetry object
 controller.start_play()
 
-while current_interval_key <= bar_len:
+while current_interval_key < bar_len:
     # TODO need an object to track the ticks
     this_period = symbol.ohlc.bars.index[current_interval_key]
     symbol.period = this_period
