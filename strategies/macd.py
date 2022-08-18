@@ -1,10 +1,10 @@
 from core.abstracts import (
-    IStateWaiting,
-    IStateEnteringPosition,
+    StateWaiting,
+    StateEnteringPosition,
     State,
-    IStateStoppingLoss,
-    IStateTakingProfit,
-    IStateTerminated,
+    StateStoppingLoss,
+    StateTakingProfit,
+    StateTerminated,
     Instance,
     InstanceTemplate,
 )
@@ -15,7 +15,6 @@ from dateutil.relativedelta import relativedelta
 from numpy import NaN
 import numpy as np
 import logging
-from time import sleep
 
 
 log = logging.getLogger(__name__)
@@ -101,7 +100,7 @@ class MacdInstanceTemplate(InstanceTemplate):
         self.sma_comparison_period = sma_comparison_period
 
 
-class MacdStateWaiting(IStateWaiting):
+class MacdStateWaiting(StateWaiting):
     def __init__(self, parent_instance: Instance, previous_state: State = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
@@ -224,7 +223,7 @@ class MacdStateWaiting(IStateWaiting):
         return df.loc[(df.macd_crossover == True) & (df.macd_macd < 0)].index[-1]
 
 
-class MacdStateEnteringPosition(IStateEnteringPosition):
+class MacdStateEnteringPosition(StateEnteringPosition):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
@@ -237,7 +236,7 @@ class MacdStateEnteringPosition(IStateEnteringPosition):
         return super().do_exit()
 
 
-class MacdStateTakingProfit(IStateTakingProfit):
+class MacdStateTakingProfit(StateTakingProfit):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         # if you're going to override the take profit units or price, do it before calling super init
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
@@ -251,7 +250,7 @@ class MacdStateTakingProfit(IStateTakingProfit):
     #    return super().do_exit()
 
 
-class MacdStateStoppingLoss(IStateStoppingLoss):
+class MacdStateStoppingLoss(StateStoppingLoss):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
@@ -260,7 +259,7 @@ class MacdStateStoppingLoss(IStateStoppingLoss):
         return super().check_exit()
 
 
-class MacdStateTerminated(IStateTerminated):
+class MacdStateTerminated(StateTerminated):
     def __init__(self, previous_state: State, parent_instance: Instance = None) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 

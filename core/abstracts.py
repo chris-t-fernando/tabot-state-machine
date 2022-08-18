@@ -122,7 +122,7 @@ class State(ABC):
         return self.__class__.__name__
 
 
-class IStateWaiting(State):
+class StateWaiting(State):
     _cls_str = "IStateWaiting"
 
     @abstractmethod
@@ -130,7 +130,7 @@ class IStateWaiting(State):
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
 
-class IStateEnteringPosition(State):
+class StateEnteringPosition(State):
     _cls_str = "IStateEnteringPosition"
 
     @abstractmethod
@@ -311,7 +311,7 @@ class IStateEnteringPosition(State):
             print("wut")
 
 
-class IStateTakingProfit(State):
+class StateTakingProfit(State):
     @abstractmethod
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
@@ -441,7 +441,7 @@ class IStateTakingProfit(State):
         return super().do_exit()
 
 
-class IStateStoppingLoss(State):
+class StateStoppingLoss(State):
     @abstractmethod
     # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None) -> None:
@@ -456,7 +456,7 @@ class IStateStoppingLoss(State):
         return State.STATE_MOVE, terminated_state, {}
 
 
-class IStateTerminated(State):
+class StateTerminated(State):
     @abstractmethod
     # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
@@ -1001,7 +1001,7 @@ class Controller(ABC):
         for i in self.instances:
             i.run()
 
-            if isinstance(i.state, IStateTerminated):
+            if isinstance(i.state, StateTerminated):
                 # if this instance is terminated, spin up a new one
                 self.terminated_instances.append(i)
                 new_instances.append(self.play_instance_class(i.config, self))
