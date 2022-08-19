@@ -13,6 +13,7 @@ from strategies.macd import (
 from core.abstracts import ControllerConfig, Controller, Symbol
 import btalib
 import logging
+from time import sleep
 
 logger = logging.getLogger()
 stream_handler = logging.StreamHandler()
@@ -23,7 +24,7 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
-level = logging.DEBUG
+level = 9
 log = logging.getLogger(__name__)
 log.setLevel(level)
 logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)
@@ -72,18 +73,18 @@ _PREFIX = "tabot"
 api_key = store.get(f"/{_PREFIX}/paper/alpaca/api_key")
 security_key = store.get(f"/{_PREFIX}/paper/alpaca/security_key")
 
-# broker = alpaca.AlpacaAPI(
-#    alpaca_key_id=api_key,
-#    alpaca_secret_key=security_key,
-# )
+broker = alpaca.AlpacaAPI(
+    alpaca_key_id=api_key,
+    alpaca_secret_key=security_key,
+)
 
-broker = back_test.BackTestAPI(sell_metric="High", buy_metric="Low")
-
+# broker = back_test.BackTestAPI(sell_metric="High", buy_metric="Low")
+back_testing = False
 symbol = Symbol(
-    yf_symbol="DOGE-USD", min_price_increment=0.00001, back_testing=True
+    yf_symbol="DOGE-USD", min_price_increment=0.00001, back_testing=back_testing
 )  # need to do api calls to generate increments etc
 
-broker._put_symbol(symbol)
+# broker._put_symbol(symbol)
 
 symbol.ohlc.apply_ta(btalib.sma)
 symbol.ohlc.apply_ta(MacdTA.macd)
@@ -92,10 +93,15 @@ current_interval_key = 3500
 # current_interval = symbol.ohlc.bars.index[current_interval_key]
 bar_len = len(symbol.ohlc.bars)
 
+
 symbol.period = symbol.ohlc.bars.index[current_interval_key]
 
 controller = Controller(symbol, play_config, broker)  # also creates a play telemetry object
 controller.start_play()
+
+while True:
+    controller.run()
+    sleep(300)
 
 while current_interval_key < bar_len:
     # TODO need an object to track the ticks

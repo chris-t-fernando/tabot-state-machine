@@ -74,9 +74,10 @@ playtemplate
 }
 
 """
-symbol_map = {
+symbol_map = {}
+symbol_map["crypto-alt"] = {
     "category": "crypto-alt",
-    "exchange": alpaca,
+    "exchange": "alpaca",
     "symbols": ["BTC-USD", "ADA-USD", "SOL-USD"],
 }
 
@@ -116,6 +117,18 @@ play_library["crypto-alt"]["choppy"] = {
 
 conditions_start = {"crypto-stable": "choppy", "crypto-alt": "bull", "nyse": "flat"}
 conditions_changed = {"crypto-stable": "choppy", "crypto-alt": "choppy", "nyse": "flat"}
+
+symbol_groups = ["crypto-alt"]
+
+# instantiate
+symbol_handler = {}
+for group in symbol_groups:
+    for symbol in symbol_map[group]["symbols"]:
+        symbol_handler[symbol] = Symbol(symbol)
+
+    conditions = conditions_start[group]
+    play = play_library[group][conditions]
+print("banana")
 
 # do something with all of this
 # instantiate symbols, register with backtest broker

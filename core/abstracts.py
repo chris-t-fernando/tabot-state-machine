@@ -673,16 +673,16 @@ class Instance(ABC):
         self._buy_order = None
         self._active_sales_order = None
         self._sales_orders = {}
-        log_group = f"{self.symbol_str}-{self.config.name}"
-        stream_name = self._generate_id()
-        self.id = f"{log_group}-{stream_name}"
+        log_group = "tabot-state-machine"
+        unique_id = self._generate_id()
+        self.id = f"{self.symbol_str}-{self.config.name}-{unique_id}"
         instance_log = logging.getLogger(self.id)
         instance_log.propagate = False
         format_str = "%(levelname)%(message)"
         formatter = jsonlogger.JsonFormatter(format_str)
         self.handler = CloudWatchLogsHandler(
             log_group_name=log_group,
-            log_stream_name=stream_name,
+            log_stream_name=self.id,
             buffer_duration=10000,
             batch_count=100,
         )
@@ -822,10 +822,14 @@ class Instance(ABC):
         # otherwise refresh it and return it
         existing_order = self._sales_orders[self._active_sales_order.order_id]
         self._active_sales_order = self.broker.get_order(existing_order.order_id)
+        # filled sales order to be updated here
+        if self._active_sales_order.status_text == "filled":
+            self._sales_orders[existing_order.order_id] = self._active_sales_order
+
         return self._active_sales_order
 
     @open_sales_order.setter
-    def open_sales_order(self, new_order):
+    def open_sales_order(self, new_order: IOrderResult):
         if self._active_sales_order != None:
             # there's already a sales order. check if its filled or not
             existing_order = self.open_sales_order
