@@ -10,7 +10,7 @@ from strategies.macd import (
     MacdTA,
     MacdInstanceTemplate,
 )
-from core.abstracts import ControllerConfig, Controller, Symbol
+from core.abstracts import ControllerConfig, PlayController, Symbol
 import btalib
 import logging
 from time import sleep
@@ -24,8 +24,8 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
-level = 9
-log = logging.getLogger(__name__)
+level = logging.DEBUG
+log = logging.getLogger()
 log.setLevel(level)
 logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)
 logging.getLogger("core.abstracts").setLevel(level)
@@ -96,7 +96,7 @@ bar_len = len(symbol.ohlc.bars)
 
 symbol.period = symbol.ohlc.bars.index[current_interval_key]
 
-controller = Controller(symbol, play_config, broker)  # also creates a play telemetry object
+controller = PlayController(symbol, play_config, broker)  # also creates a play telemetry object
 controller.start_play()
 
 while True:

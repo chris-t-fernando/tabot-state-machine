@@ -8,8 +8,12 @@ from math import floor
 from broker_api.ibroker_api import ITradeAPI, IOrderResult
 from logbeam import CloudWatchLogsHandler
 from pythonjsonlogger import jsonlogger
+from typing import List
 
 log = logging.getLogger(__name__)
+
+# logging.getLogger("core.abstracts").setLevel(9)
+# logging.getLogger("strategies.macd").setLevel(9)
 
 """
 At a minimum, a Strategy must implement the following interfaces:
@@ -265,9 +269,7 @@ class StateEnteringPosition(State):
             self.parent_instance.buy_order = order
             taking_profit_state = self.controller.play_config.state_taking_profit
             log_extras = {"next_state": taking_profit_state.__name__}
-            self.log.info(
-                f"Buy order submitted", state_parameters=log_extras, order=order.as_dict()
-            )
+            self.log.info(f"Buy order filled", state_parameters=log_extras, order=order.as_dict())
 
             return State.STATE_MOVE, taking_profit_state, {}
 
@@ -659,6 +661,7 @@ class Instance(ABC):
     def __init__(
         self, template: InstanceTemplate, play_controller, state=None, state_args=None
     ) -> None:
+        self.parent_controller: PlayController
         self.config = template
         self.parent_controller = play_controller
         self.broker = play_controller.broker
@@ -667,6 +670,7 @@ class Instance(ABC):
         self.symbol_str = play_controller.symbol.yf_symbol
         self.telemetry = InstanceTelemetry(play_telemetry=play_controller.telemetry)
         self.start_timestamp = datetime.utcnow()
+        self.started = True
         self._entry_price = None
         self._stop_price = None
         self._target_price = None
@@ -731,6 +735,25 @@ class Instance(ABC):
 
             else:
                 raise NotImplementedError("This should never happen...")
+
+    def stop(self, hard_stop: bool = False):
+        self.log.info(f"Stopping instance {self} (hard_stop: {hard_stop})")
+        state = self.state
+        if isinstance(state, StateTerminated):
+            # nothing to do
+            self.log.info(f"Can't stop instance {self} - already in Terminated state")
+        elif isinstance(state, StateStoppingLoss) or isinstance(state, StateTakingProfit):
+            if hard_stop:
+                self.log.warning(f"Hard stopping {self}")
+                self.state = self.parent_controller.play_config.state_terminated
+            else:
+                self.log.info(f"Instance {self} is in state {state} - skipping stop")
+        else:
+            # fair game
+            self.log.info(f"Stopping {self}")
+            self.state = self.parent_controller.play_config.state_terminated
+
+        self.started = False
 
     @property
     def state(self):
@@ -948,7 +971,7 @@ class InstanceList:
         return gain
 
 
-class Controller(ABC):
+class PlayController(ABC):
     def __init__(
         self,
         symbol: Symbol,
@@ -963,6 +986,7 @@ class Controller(ABC):
         self.broker = broker
         # PlayInstance class to be use - can be overridden to enable extension
         self.play_instance_class = play_instance_class
+        self.instances: List[Instance]
         self.instances = []
         self.terminated_instances = []
         self.telemetry = ControllerTelemetry()
@@ -999,6 +1023,12 @@ class Controller(ABC):
 
         return gain
 
+    # @property
+    def stop(self, hard_stop: bool = False):
+        for i in self.instances:
+            i.stop(hard_stop=hard_stop)
+
+    # TODO rewrite this to use @property active instances
     def run(self):
         new_instances = []
         retained_instances = []
