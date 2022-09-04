@@ -31,16 +31,19 @@ formatter = logging.Formatter(
     "%(asctime)s - %(name)16s - %(levelname)8s - %(funcName)15s - %(message)s"
 )
 stream_handler.setFormatter(formatter)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.CRITICAL)
+root_logger.addHandler(stream_handler)
 
 level = 9
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 log.setLevel(level)
-log.addHandler(stream_handler)
+# logging.getLogger("symbol.symbol_data").setLevel(level)
 logging.getLogger("core.abstracts").setLevel(level)
 logging.getLogger("strategies.macd").setLevel(level)
 
-logging.getLogger("core").setLevel(level)
-logging.getLogger("strategies").setLevel(level)
+# logging.getLogger("core").setLevel(level)
+# logging.getLogger("strategies").setLevel(level)
 
 
 class Orchestrator:
@@ -53,7 +56,11 @@ class Orchestrator:
 
 class SymbolGroup:
     def __init__(
-        self, name: str, play_config: ControllerConfig = None, broker: ibroker_api.ITradeAPI = None, back_testing:bool=False
+        self,
+        name: str,
+        play_config: ControllerConfig = None,
+        broker: ibroker_api.ITradeAPI = None,
+        back_testing: bool = False,
     ) -> None:
         self._symbols: Set[Symbol]
         self._play_controllers: Set[PlayController]
@@ -82,6 +89,10 @@ class SymbolGroup:
 
     def add_symbol(self, symbol: Symbol):
         self._symbols.add(symbol)
+        # TODO broker should return true/false if backtesting
+        if self.broker.back_testing:
+            self.broker._put_symbol(symbol)
+
         self._apply_ta()
 
     def _apply_ta(self):
@@ -102,7 +113,7 @@ class SymbolGroup:
             _new_controller = PlayController(s, self._play_config, self.broker)
             self._play_controllers.add(_new_controller)
             _new_controller.start_play()
-        
+
         self.started = True
 
     @property
@@ -149,29 +160,22 @@ class SymbolGroup:
 
         self._broker = new_broker
 
-
     # use a property here to keep broker and symbol in sync!
     @property
     def period(self):
         return self._period
-    
+
     @period.setter
     def period(self, new_period):
         self._period = new_period
 
         if self.back_testing:
             self.broker.period = new_period
-        
+
             for s in self._symbols:
                 s.period = new_period
 
-    def first(self):
 
-        for s in self._symbols:
-            s.ohlc.get_first()
-
-    def last(self)
-    
 """
 set a play template for each category
 query for conditions
@@ -217,7 +221,7 @@ symbol_map = {}
 symbol_map["crypto-alt"] = {
     "category": "crypto-alt",
     "exchange": "alpaca",
-    "symbols": ["BTC-USD", "ADA-USD", "SOL-USD"],
+    "symbols": ["ATOM-USD", "ADA-USD", "SOL-USD"],
 }
 
 play_library = {}
@@ -288,26 +292,36 @@ play_config = ControllerConfig(
 )
 
 back_testing = True
-sg = SymbolGroup(name="crypto-alt", play_config=play_config, broker=broker, back_testing=back_testing)
+sg = SymbolGroup(
+    name="crypto-alt", play_config=play_config, broker=broker, back_testing=back_testing
+)
 
-sg.add_symbol(Symbol("BTC-USD", time_manager=tm, back_testing=back_testing))
+for group in symbol_groups:
+    for symbol in symbol_map[group]["symbols"]:
+        sg.add_symbol(Symbol(symbol, time_manager=tm, back_testing=back_testing))
+
+# sg.add_symbol(Symbol("BTC-USD", time_manager=tm, back_testing=back_testing))
+# sg.add_symbol(Symbol("ETH-USD", time_manager=tm, back_testing=back_testing))
+# sg.add_symbol(Symbol("ATOM-USD", time_manager=tm, back_testing=back_testing))
 sg.register_ta(MacdTA.macd)
 sg.register_ta(btalib.sma)
 sg.start()
 
 # now make the loop
 if back_testing:
-    start = 
-    while 
+    tm.now = tm.first
+    while tm.now < tm.last:
+        print("banana")
+        sg.run()
+        tm.tick()
 
 else:
     ...
-symbol.period = symbol.ohlc.bars.index[current_interval_key]
+# symbol.period = symbol.ohlc.bars.index[current_interval_key]
 
 sg.run()
 sg.run()
 sg.run()
-
 
 
 # FORGET ALL THIS STUFF - OLD
