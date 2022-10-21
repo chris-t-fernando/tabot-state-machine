@@ -4,4 +4,6 @@ git+https://github.com/chris-t-fernando/parameter-store.git
 git+https://github.com/chris-t-fernando/cloudwatch-handler
 python-json-logger
 #logbeam
-git+https://github.com/anu-kailash/logbeam.git
+#git+https://github.com/anu-kailash/logbeam.git
+git+https://github.com/alexanderlukanin13/logbeam.git
+bta-lib

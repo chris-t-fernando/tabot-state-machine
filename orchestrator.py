@@ -58,6 +58,7 @@ class SymbolGroup:
     def __init__(
         self,
         name: str,
+        time_manager,
         play_config: ControllerConfig = None,
         broker: ibroker_api.ITradeAPI = None,
         back_testing: bool = False,
@@ -71,8 +72,9 @@ class SymbolGroup:
         self.started = False
         self._play_controllers = set()
         self.name = name
-        self._period = None
+        # self._period = None
         self.back_testing = back_testing
+        self._tm = time_manager
 
         if play_config:
             self.play_config = play_config
@@ -135,6 +137,7 @@ class SymbolGroup:
 
     def run(self):
         # need a way to mark retiring play controllers so that they don't get started up again
+        log.info(f"Running for period {self.period}")
         for c in self.active_play_controllers:
             c.run()
 
@@ -145,7 +148,9 @@ class SymbolGroup:
     @play_config.setter
     def play_config(self, new_config: ControllerConfig) -> bool:
         if self.started:
-            raise RuntimeError(f"Can't change play config for {self.name} while play is running")
+            raise RuntimeError(
+                f"Can't change play config for {self.name} while play is running"
+            )
 
         self._play_config = new_config
 
@@ -156,24 +161,26 @@ class SymbolGroup:
     @broker.setter
     def broker(self, new_broker: ibroker_api.ITradeAPI):
         if self.started:
-            raise RuntimeError(f"Can't change broker for {self.name} while play is running")
+            raise RuntimeError(
+                f"Can't change broker for {self.name} while play is running"
+            )
 
         self._broker = new_broker
 
     # use a property here to keep broker and symbol in sync!
     @property
     def period(self):
-        return self._period
+        return self._tm.now
 
-    @period.setter
-    def period(self, new_period):
-        self._period = new_period
+    # @period.setter
+    # def period(self, new_period):
+    #    self._period = new_period
 
-        if self.back_testing:
-            self.broker.period = new_period
+    #    if self.back_testing:
+    #        self.broker.period = new_period
 
-            for s in self._symbols:
-                s.period = new_period
+    #        for s in self._symbols:
+    #            s.period = new_period
 
 
 """
@@ -293,16 +300,17 @@ play_config = ControllerConfig(
 
 back_testing = True
 sg = SymbolGroup(
-    name="crypto-alt", play_config=play_config, broker=broker, back_testing=back_testing
+    name="crypto-alt",
+    play_config=play_config,
+    broker=broker,
+    back_testing=back_testing,
+    time_manager=tm,
 )
 
 for group in symbol_groups:
     for symbol in symbol_map[group]["symbols"]:
         sg.add_symbol(Symbol(symbol, time_manager=tm, back_testing=back_testing))
 
-# sg.add_symbol(Symbol("BTC-USD", time_manager=tm, back_testing=back_testing))
-# sg.add_symbol(Symbol("ETH-USD", time_manager=tm, back_testing=back_testing))
-# sg.add_symbol(Symbol("ATOM-USD", time_manager=tm, back_testing=back_testing))
 sg.register_ta(MacdTA.macd)
 sg.register_ta(btalib.sma)
 sg.start()
@@ -311,57 +319,9 @@ sg.start()
 if back_testing:
     tm.now = tm.first
     while tm.now < tm.last:
-        print("banana")
         sg.run()
         tm.tick()
 
 else:
+    # this is where you do the sleep stuff
     ...
-# symbol.period = symbol.ohlc.bars.index[current_interval_key]
-
-sg.run()
-sg.run()
-sg.run()
-
-
-# FORGET ALL THIS STUFF - OLD
-
-# instantiate
-symbol_handler = {}
-for group in symbol_groups:
-    for symbol in symbol_map[group]["symbols"]:
-        symbol_handler[symbol] = Symbol(symbol, time_manager=tm, back_testing=True)
-        symbol_handler[symbol].ohlc.apply_ta(btalib.sma)
-        symbol_handler[symbol].ohlc.apply_ta(MacdTA.macd)
-        broker._put_symbol(symbol_handler[symbol])
-
-        # tm.add_symbol(symbol_handler[symbol])
-
-    conditions = conditions_start[group]
-    play = play_library[group][conditions]
-
-
-# do something with all of this
-# instantiate symbols, register with backtest broker
-# boot up the PlayController objects
-
-store = Ssm()
-_PREFIX = "tabot"
-api_key = store.get(f"/{_PREFIX}/paper/alpaca/api_key")
-security_key = store.get(f"/{_PREFIX}/paper/alpaca/security_key")
-
-controller = PlayController(symbol_handler[symbol], play_config, broker)
-controller.start_play()
-
-# tm.now = tm.first
-# while tm.now <= tm.last:
-#    controller.run()
-#    tm.tick()
-
-# or
-print(f"Starting loop at {tm.now}")
-while True:
-    controller.run()
-    sleep(300)
-    print(f"{tm.now} to {tm.last}")
-    tm.now = tm.last

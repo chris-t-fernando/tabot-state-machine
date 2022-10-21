@@ -29,7 +29,15 @@ class MacdTA:
 
     def get_interval_settings(interval):
         minutes_intervals = ["1m", "2m", "5m", "15m", "30m", "60m", "90m"]
-        max_period = {"1m": 6, "2m": 59, "5m": 59, "15m": 59, "30m": 59, "60m": 500, "90m": 59}
+        max_period = {
+            "1m": 6,
+            "2m": 59,
+            "5m": 59,
+            "15m": 59,
+            "30m": 59,
+            "60m": 500,
+            "90m": 59,
+        }
 
         if interval in minutes_intervals:
             return (
@@ -61,7 +69,9 @@ class MacdTA:
         # signal here means MA26
         # macd here means MA12
         # so macd_above_signal means MA12 above MA26
-        df["macd_above_signal"] = np.where(df["macd_macd"] > df["macd_signal"], True, False)
+        df["macd_above_signal"] = np.where(
+            df["macd_macd"] > df["macd_signal"], True, False
+        )
         # blue means MA12 is above MA26
         df["macd_cycle"] = np.where(df["macd_macd"] > df["macd_signal"], "blue", "red")
         # crossover happens when MA12 crosses over MA26
@@ -105,6 +115,7 @@ class MacdStateWaiting(StateWaiting):
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
+        self.log.debug(f"{self.symbol_str}: Running check_exit()")
         config_period = self.config.sma_comparison_period
 
         df = self.ohlc.get_range()
@@ -113,7 +124,9 @@ class MacdStateWaiting(StateWaiting):
         crossover = MacdStateWaiting.check_crossover(row)
         macd_negative = MacdStateWaiting.check_macd_negative(row)
         last_sma = MacdStateWaiting.get_last_sma(df=df)
-        recent_average_sma = MacdStateWaiting.get_recent_average_sma(df=df, period=config_period)
+        recent_average_sma = MacdStateWaiting.get_recent_average_sma(
+            df=df, period=config_period
+        )
         sma_trending_up = MacdStateWaiting.check_sma(
             last_sma=last_sma, recent_average_sma=recent_average_sma
         )
@@ -144,7 +157,9 @@ class MacdStateWaiting(StateWaiting):
         df = self.ohlc.get_range()
 
         blue_cycle_start = MacdStateWaiting.get_blue_cycle_start(df=df)
-        red_cycle_start = MacdStateWaiting.get_red_cycle_start(df=df, before_date=blue_cycle_start)
+        red_cycle_start = MacdStateWaiting.get_red_cycle_start(
+            df=df, before_date=blue_cycle_start
+        )
 
         stop_loss_unit = MacdStateWaiting.calculate_stop_loss_unit_price(
             df=df,
@@ -158,7 +173,9 @@ class MacdStateWaiting(StateWaiting):
             end_date=blue_cycle_start,
         )
 
-        intervals_since_stop = MacdStateWaiting.count_intervals(df=df, start_date=stop_unit_date)
+        intervals_since_stop = MacdStateWaiting.count_intervals(
+            df=df, start_date=stop_unit_date
+        )
 
         self.log.log(
             logging.DEBUG,
@@ -216,7 +233,9 @@ class MacdStateWaiting(StateWaiting):
     # maybe dont need these. need to store this stuff in instance, not state
     def get_red_cycle_start(df: pd.DataFrame, before_date: pd.Timestamp):
         return df.loc[
-            (df["macd_cycle"] == "blue") & (df.index < before_date) & (df.macd_crossover == True)
+            (df["macd_cycle"] == "blue")
+            & (df.index < before_date)
+            & (df.macd_crossover == True)
         ].index[-1]
 
     def get_blue_cycle_start(df: pd.DataFrame):
