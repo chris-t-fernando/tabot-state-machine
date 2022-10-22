@@ -1,4 +1,4 @@
-from broker_api import alpaca, back_test, ibroker_api
+from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from parameter_store.ssm import Ssm
 from strategies.macd import (
     MacdStateEnteringPosition,
@@ -9,17 +9,19 @@ from strategies.macd import (
     MacdTA,
     MacdInstanceTemplate,
 )
-from core.abstracts import (
+
+from symbol.symbol import Symbol
+
+from core import (
     ControllerConfig,
     PlayController,
-    Symbol,
     StateEnteringPosition,
     StateWaiting,
     StateTerminated,
     StateStoppingLoss,
     StateTakingProfit,
 )
-from core.time_manager import TimeManager
+from core import TimeManager
 import btalib
 from time import sleep
 from typing import Set
@@ -38,14 +40,11 @@ root_logger.addHandler(stream_handler)
 level = 9
 log = logging.getLogger(__name__)
 log.setLevel(level)
-# logging.getLogger("symbol.symbol_data").setLevel(level)
 logging.getLogger("core.abstracts").setLevel(level)
 logging.getLogger("strategies.macd").setLevel(level)
 
-# logging.getLogger("core").setLevel(level)
-# logging.getLogger("strategies").setLevel(level)
 
-
+# TODO what's the plan for this object? how does it differ to SymbolGroup?
 class Orchestrator:
     def __init__(self) -> None:
         pass
@@ -60,7 +59,7 @@ class SymbolGroup:
         name: str,
         time_manager,
         play_config: ControllerConfig = None,
-        broker: ibroker_api.ITradeAPI = None,
+        broker: ITradeAPI = None,
         back_testing: bool = False,
     ) -> None:
         self._symbols: Set[Symbol]
@@ -72,7 +71,6 @@ class SymbolGroup:
         self.started = False
         self._play_controllers = set()
         self.name = name
-        # self._period = None
         self.back_testing = back_testing
         self._tm = time_manager
 
@@ -155,11 +153,11 @@ class SymbolGroup:
         self._play_config = new_config
 
     @property
-    def broker(self) -> ibroker_api.ITradeAPI:
+    def broker(self) -> ITradeAPI:
         return self._broker
 
     @broker.setter
-    def broker(self, new_broker: ibroker_api.ITradeAPI):
+    def broker(self, new_broker: ITradeAPI):
         if self.started:
             raise RuntimeError(
                 f"Can't change broker for {self.name} while play is running"
@@ -271,7 +269,7 @@ conditions_changed = {"crypto-stable": "choppy", "crypto-alt": "choppy", "nyse":
 symbol_groups = ["crypto-alt"]
 
 tm = TimeManager()
-broker = back_test.BackTestAPI(time_manager=tm, sell_metric="Close", buy_metric="High")
+broker = BackTestAPI(time_manager=tm, sell_metric="Close", buy_metric="High")
 
 play = play_library["crypto-alt"]["bull"]
 

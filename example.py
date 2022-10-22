@@ -1,7 +1,7 @@
-from broker_api import alpaca, back_test
-from parameter_store.ssm import Ssm
+from broker_api import AlpacaAPI, BackTestAPI
+from parameter_store import Ssm
 
-from strategies.macd import (
+from strategies import (
     MacdStateEnteringPosition,
     MacdStateStoppingLoss,
     MacdStateTakingProfit,
@@ -10,7 +10,8 @@ from strategies.macd import (
     MacdTA,
     MacdInstanceTemplate,
 )
-from core.abstracts import ControllerConfig, PlayController, Symbol
+from symbol import Symbol
+from core import ControllerConfig, PlayController
 import btalib
 import logging
 from time import sleep
@@ -25,11 +26,11 @@ logger.addHandler(stream_handler)
 logger.setLevel(logging.CRITICAL)
 
 level = logging.DEBUG
-log = logging.getLogger()
-log.setLevel(level)
-logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)
-logging.getLogger("core.abstracts").setLevel(level)
-logging.getLogger("strategies.macd").setLevel(level)
+
+# logging.getLogger("symbol.symbol_data").setLevel(logging.CRITICAL)
+logging.getLogger("symbol").setLevel(logging.CRITICAL)
+logging.getLogger("core").setLevel(level)
+logging.getLogger("strategies").setLevel(level)
 # logging.getLogger("broker_api.back_test").setLevel(level)
 
 # TODO stop loss signal at high/low/close
@@ -73,7 +74,7 @@ _PREFIX = "tabot"
 api_key = store.get(f"/{_PREFIX}/paper/alpaca/api_key")
 security_key = store.get(f"/{_PREFIX}/paper/alpaca/security_key")
 
-broker = alpaca.AlpacaAPI(
+broker = AlpacaAPI(
     alpaca_key_id=api_key,
     alpaca_secret_key=security_key,
 )
@@ -96,7 +97,9 @@ bar_len = len(symbol.ohlc.bars)
 
 symbol.period = symbol.ohlc.bars.index[current_interval_key]
 
-controller = PlayController(symbol, play_config, broker)  # also creates a play telemetry object
+controller = PlayController(
+    symbol, play_config, broker
+)  # also creates a play telemetry object
 controller.start_play()
 
 while True:

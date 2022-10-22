@@ -1,4 +1,4 @@
-from core.abstracts import (
+from core import (
     StateWaiting,
     StateEnteringPosition,
     State,

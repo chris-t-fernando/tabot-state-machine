@@ -1,5 +1,5 @@
 from typing import Set
-from core.abstracts import Symbol
+from symbol import Symbol
 from pandas import Timestamp
 from dateutil.relativedelta import relativedelta
 
@@ -71,13 +71,16 @@ class TimeManager:
     @now.setter
     def now(self, new_date):
         if new_date < self.first:
-            raise KeyError(f"New date {new_date} is earlier than earliest date {self.first}")
+            raise KeyError(
+                f"New date {new_date} is earlier than earliest date {self.first}"
+            )
         if new_date > self.last:
             raise KeyError(f"New date {new_date} is after latest date {self.last}")
 
         self._date = new_date
 
     def tick(self):
+        # TODO raise exception or something if we try to tick in to the future
         self.now = self.now + self._delta
         return self.now
 

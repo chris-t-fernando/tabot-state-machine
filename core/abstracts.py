@@ -1,19 +1,15 @@
 from abc import ABC, abstractmethod
-from symbol.symbol import Symbol, InvalidQuantity, InvalidPrice
-from symbol.symbol_data import SymbolData
+from symbol import Symbol, SymbolData, InvalidQuantity, InvalidPrice
 from datetime import datetime
 import uuid
 import logging
 from math import floor
-from broker_api.ibroker_api import ITradeAPI, IOrderResult
+from broker_api import ITradeAPI, IOrderResult
 from logbeam import CloudWatchLogsHandler
 from pythonjsonlogger import jsonlogger
 from typing import List
 
 log = logging.getLogger(__name__)
-
-# logging.getLogger("core.abstracts").setLevel(9)
-# logging.getLogger("strategies.macd").setLevel(9)
 
 """
 At a minimum, a Strategy must implement the following interfaces:
@@ -562,6 +558,7 @@ class StateTerminated(State):
         self.log.info(f"Instance summary", state_parameters=log_extras)
         self.log.info(f"Instance termination complete")
         self.parent_instance.handler.close()
+
 
 class ControllerConfig(ABC):
     state_waiting: State = None
