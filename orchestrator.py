@@ -1,5 +1,5 @@
 from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
-from parameter_store.ssm import Ssm
+from parameter_store import Ssm
 from strategies.macd import (
     MacdStateEnteringPosition,
     MacdStateStoppingLoss,
@@ -10,7 +10,7 @@ from strategies.macd import (
     MacdInstanceTemplate,
 )
 
-from symbol.symbol import Symbol
+from symbol import Symbol
 
 from core import (
     ControllerConfig,
