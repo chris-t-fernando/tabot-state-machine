@@ -15,10 +15,27 @@ from strategies.macd import (
 )
 import json
 
+import logging
 
-class PlayItem:
-    category: str
-    conditions: str
+stream_handler = logging.StreamHandler()
+formatter = logging.Formatter(
+    "%(asctime)s - %(name)16s - %(levelname)8s - %(funcName)15s - %(message)s"
+)
+stream_handler.setFormatter(formatter)
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.CRITICAL)
+root_logger.addHandler(stream_handler)
+
+level = 9
+log = logging.getLogger(__name__)
+log.setLevel(level)
+logging.getLogger("core.abstracts").setLevel(level)
+logging.getLogger("strategies.macd").setLevel(level)
+
+
+class PlayConfig:
+    symbol_category: str
+    market_condition: str
     max_play_size: float
     buy_timeout_intervals: int
     buy_order_type: str
@@ -33,10 +50,13 @@ class PlayItem:
     state_stopping_loss: State
     state_terminated: State
 
+    def __repr__(self) -> str:
+        return f"{self.symbol_category} {self.market_condition}"
+
     def __init__(
         self,
-        category: str,
-        conditions: str,
+        symbol_category: str,
+        market_condition: str,
         max_play_size: float,
         buy_timeout_intervals: int,
         buy_order_type: str,
@@ -51,9 +71,8 @@ class PlayItem:
         state_stopping_loss: State,
         state_terminated: State,
     ) -> None:
-
-        self.category = category
-        self.conditions = conditions
+        self.symbol_category = symbol_category
+        self.market_condition = market_condition
         self.max_play_size = max_play_size
         self.buy_timeout_intervals = buy_timeout_intervals
         self.buy_order_type = buy_order_type
@@ -62,56 +81,73 @@ class PlayItem:
         self.stop_loss_type = stop_loss_type
         self.stop_loss_trigger_pct = stop_loss_trigger_pct
         self.stop_loss_hold_intervals = stop_loss_hold_intervals
-        self.state_waiting = state_waiting
-        self.state_entering_position = state_entering_position
-        self.state_taking_profit = state_taking_profit
-        self.state_stopping_loss = state_stopping_loss
-        self.state_terminated = state_terminated
+        self.state_waiting = self._state_str_to_object(state_waiting)
+        self.state_entering_position = self._state_str_to_object(
+            state_entering_position
+        )
+        self.state_taking_profit = self._state_str_to_object(state_taking_profit)
+        self.state_stopping_loss = self._state_str_to_object(state_stopping_loss)
+        self.state_terminated = self._state_str_to_object(state_terminated)
 
-
-# TODO iterate through library, generate and return
-class PlayFactory:
-    """
-    Read from weather categories and configs from storage
-    Produce a PlayLibray
-
-    """
-
-    def generate_play_items(raw_library: set, categories: set, conditions: set):
+    def _state_str_to_object(self, state_str):
         g = globals().copy()
-        found = "PlayOrchestrator" in g.keys()
-        for this_name, obj in g.items():
-            if this_name == "PlayOrchestrator":
-                print("banana")
+        if state_str in g.keys():
+            return g[state_str]
 
-    ...
+        raise RuntimeError(
+            f"Could not find {state_str} in globals() - did you import it?"
+        )
 
 
 class PlayLibrary:
-    categories: set[str]
+    symbol_categories: set[str]
     store: IParameterStore
     _store_path: str
     _raw_library: str
-    library: set[set[PlayItem]]
-    _conditions: list[str] = ["bull", "sideways", "choppy", "bear"]
-    categories: set[str]
+    _uninstantiated_symbols: set[Symbol]
+    library: set[set[PlayConfig]]
 
     def __init__(
         self,
         store: IParameterStore,
-        store_path: str = "/tabot/play_library/paper/play_index",
+        store_path: str = "/tabot/play_library/paper",
     ):
+        self.uninstantiated_symbols = set()
         self.store = store
         self._store_path = store_path
         self._raw_library = self._get_library()
-        self.library = PlayFactory.generate_play_items(
-            raw_library=self._raw_library,
-            categories=self.categories,
-            conditions=self._conditions,
+
+    # TODO some of this goes straight in to state, some gets returned. why?
+    # TODO instantiate symbols, lifecycle them somehow
+    def _get_library(self):
+        # /root/symbol_categories - the different symbol groups eg crypto_stable
+        # /root/market_conditions - the different market conditions eg choppy
+        # /root/crypto_stable/bear - example path where play configs get read out
+        self.symbol_categories = set(
+            json.loads(self.store.get(f"{self._store_path}/symbol_categories"))
+        )
+        self.market_conditions = set(
+            json.loads(self.store.get(f"{self._store_path}/market_conditions"))
         )
 
-    def _get_library(self):
-        categories = set(json.loads(self.store.get(self._store_path)))
+        library = dict()
+        for cat in self.symbol_categories:
+            library[cat] = dict()
+            new_symbols = set(
+                json.loads(self.store.get(f"{self._store_path}/{cat}/symbols"))
+            )
+            if len(new_symbols & self.uninstantiated_symbols) > 0:
+                log.warning(
+                    f"Symbol appears in more than one category: {new_symbols&self.uninstantiated_symbols}"
+                )
+            self.uninstantiated_symbols |= new_symbols
+
+            for condition in self.market_conditions:
+                config_json = json.loads(
+                    self.store.get(f"{self._store_path}/{cat}/{condition}")
+                )
+                library[cat][condition] = PlayConfig(cat, condition, **config_json)
+        return library
 
 
 z = PlayLibrary(store=Ssm())
