@@ -99,12 +99,45 @@ class PlayConfig:
         )
 
 
+class SymbolHandler:
+    symbols: set[Symbol]
+
+    def __init__(self, symbols: set[str]):
+        self.symbols = set()
+        for s in symbols:
+            s_obj = self._instantiate_symbol(s)
+            self.symbols.add(s_obj)
+
+    def _instantiate_symbol(self, symbol: str) -> bool:
+        if symbol in self.symbols:
+            log.warning(
+                f"Attempted to add symbol {symbol} but it was already instantiated."
+            )
+            return
+
+        s = Symbol(yf_symbol=symbol)
+
+        return s
+
+
+#    def _enumerate_symbols(self):
+#        for cat in self.symbol_categories:
+#            new_symbols = set(
+#                json.loads(self.store.get(f"{self._store_path}/{cat}/symbols"))
+#            )
+#            if len(new_symbols & self.uninstantiated_symbols) > 0:
+#                log.warning(
+#                    f"Symbol appears in more than one category: {new_symbols&self.uninstantiated_symbols}"
+#                )
+#            self.uninstantiated_symbols |= new_symbols
+
+
 class PlayLibrary:
-    symbol_categories: set[str]
     store: IParameterStore
     _store_path: str
-    _raw_library: str
-    _uninstantiated_symbols: set[Symbol]
+    symbol_categories: set[str]
+    market_conditions: set[str]
+    symbols: set[str]
     library: set[set[PlayConfig]]
 
     def __init__(
@@ -112,46 +145,46 @@ class PlayLibrary:
         store: IParameterStore,
         store_path: str = "/tabot/play_library/paper",
     ):
-        self.uninstantiated_symbols = set()
         self.store = store
         self._store_path = store_path
-        self._raw_library = self._get_library()
+        self.symbol_categories = self._get_categories()
+        self.market_conditions = self._get_market_conditions()
+        self.symbols = self._enumerate_symbols(self.symbol_categories)
+        self.library = self._setup_library()
 
-    # TODO some of this goes straight in to state, some gets returned. why?
-    # TODO instantiate symbols, lifecycle them somehow
-    def _get_library(self):
-        # /root/symbol_categories - the different symbol groups eg crypto_stable
-        # /root/market_conditions - the different market conditions eg choppy
-        # /root/crypto_stable/bear - example path where play configs get read out
-        self.symbol_categories = set(
-            json.loads(self.store.get(f"{self._store_path}/symbol_categories"))
-        )
-        self.market_conditions = set(
-            json.loads(self.store.get(f"{self._store_path}/market_conditions"))
-        )
+    def _get_categories(self) -> set:
+        path = f"{self._store_path}/symbol_categories"
+        return set(json.loads(self.store.get(path)))
 
-        library = dict()
-        for cat in self.symbol_categories:
-            library[cat] = dict()
+    def _get_market_conditions(self) -> set:
+        path = f"{self._store_path}/market_conditions"
+        return set(json.loads(self.store.get(path)))
+
+    def _enumerate_symbols(self, symbol_categories: set[str]) -> set:
+        symbols = set()
+        for cat in symbol_categories:
             new_symbols = set(
                 json.loads(self.store.get(f"{self._store_path}/{cat}/symbols"))
             )
-            if len(new_symbols & self.uninstantiated_symbols) > 0:
-                log.warning(
-                    f"Symbol appears in more than one category: {new_symbols&self.uninstantiated_symbols}"
-                )
-            self.uninstantiated_symbols |= new_symbols
+            symbols |= new_symbols
 
+        return symbols
+
+    # TODO instantiate symbols, lifecycle them somehow
+    def _setup_library(self):
+        # /root/symbol_categories - the different symbol groups eg crypto_stable
+        # /root/market_conditions - the different market conditions eg choppy
+        # /root/crypto_stable/bear - example path where play configs get read out
+        library = dict()
+        for cat in self.symbol_categories:
+            library[cat] = dict()
             for condition in self.market_conditions:
                 config_json = json.loads(
                     self.store.get(f"{self._store_path}/{cat}/{condition}")
                 )
                 library[cat][condition] = PlayConfig(cat, condition, **config_json)
+
         return library
-
-
-z = PlayLibrary(store=Ssm())
-z._get_library()
 
 
 class WeatherResult:
@@ -233,13 +266,14 @@ class StubWeather(IWeatherReader):
 class PlayOrchestrator:
     """
     Startup responsibilities:
-        Instantiates TimeManager
-        Read config from store
-        Hand it to PlayFactory to mux symbols, bid sizes, state objects to use, state config parameters
-        Gets back an object called PlayLibrary with everything instantiated
-        Instantiates SymbolHandler
-        Instantiates Weather
-        Instantiates a PlayHandler based on weather x PlayLibrary
+        * Instantiates TimeManager
+        * Read config from store
+        * PlayLibrary object with rules instantiated
+        * Instantiates SymbolHandler
+        * Instantiates Weather
+
+    Start responsibilities
+        * Instantiates a PlayHandler based on weather x PlayLibrary
 
     Run responsibilities:
         TimeManger tick
@@ -255,10 +289,30 @@ class PlayOrchestrator:
 
     """
 
+    store: IParameterStore
     time_manager: TimeManager
+    play_library: PlayLibrary
     symbols: set[Symbol]
+    weather: IWeatherReader
 
-    def __init__(self) -> None:
+    def __init__(self, store: IParameterStore) -> None:
+        self.store = store
         self.time_manager = TimeManager()
+        self.play_library = PlayLibrary(store)
+        self.symbols = SymbolHandler(self.play_library.symbols)
+        self.weather = StubWeather(self.time_manager)
 
-    ...
+    def start(self):
+        weather = self.weather.get_all()
+        for cat in self.play_library.symbol_categories:
+            w = weather[cat]
+            play = self.play_library.library[cat][w.condition]
+
+            print("banana")
+
+    # TODO property for running plays
+
+
+store = Ssm()
+po = PlayOrchestrator(store)
+po.start()
