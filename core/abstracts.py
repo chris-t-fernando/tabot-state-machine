@@ -1014,6 +1014,9 @@ class PlayController(ABC):
         self.instances = []
         self.terminated_instances = []
 
+    # TODO previously you had a config object that had a list that had all the different parameters
+    # now you read config from SSM that should be a json dict with each of the parameters and states in it already
+    # so no need to do this permutation stuff - just iterate through the config documents and start up instances
     def _inject_common_config(self):
         for template in self.play_config.play_templates:
             template.buy_budget = self.play_config.buy_budget

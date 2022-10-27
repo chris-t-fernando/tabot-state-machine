@@ -1,7 +1,8 @@
+from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from abc import ABC, abstractmethod
 from core import TimeManager
 from parameter_store import Ssm, IParameterStore
-from core import TimeManager, State
+from core import TimeManager, State, PlayController, ControllerConfig
 from typing import Set, TypedDict
 from symbol import Symbol
 from strategies.macd import (
@@ -51,7 +52,7 @@ class PlayConfig:
     state_terminated: State
 
     def __repr__(self) -> str:
-        return f"{self.symbol_category} {self.market_condition}"
+        return f"PlayConfig {self.symbol_category} {self.market_condition}"
 
     def __init__(
         self,
@@ -292,14 +293,19 @@ class PlayOrchestrator:
     store: IParameterStore
     time_manager: TimeManager
     play_library: PlayLibrary
-    symbols: set[Symbol]
+    symbol_handler: SymbolHandler
     weather: IWeatherReader
+    _active_play_controllers: dict[str, PlayConfig]
+    _inactive_play_controllers: set
 
     def __init__(self, store: IParameterStore) -> None:
+        self._active_play_controllers = dict()
+        self._inactive_play_controllers = set()
         self.store = store
         self.time_manager = TimeManager()
+        self.broker = BackTestAPI(time_manager=self.time_manager)
         self.play_library = PlayLibrary(store)
-        self.symbols = SymbolHandler(self.play_library.symbols)
+        self.symbol_handler = SymbolHandler(self.play_library.symbols)
         self.weather = StubWeather(self.time_manager)
 
     def start(self):
@@ -307,10 +313,147 @@ class PlayOrchestrator:
         for cat in self.play_library.symbol_categories:
             w = weather[cat]
             play = self.play_library.library[cat][w.condition]
+            pc = PlayCategory(
+                "vanana",
+                symbols=self.symbol_handler.symbols,
+                time_manager=self.time_manager,
+                play_config=play,
+                broker=self.broker,
+            )
+            pc.start()
 
             print("banana")
 
+    def get_active_controller(self, category: str) -> PlayController:
+        if category not in self.play_library.library:
+            raise RuntimeError(f"Cannot find symbol category named '{category}'")
+
+        if category not in self._active_play_controllers:
+            return False
+
+        return self._active_play_controllers[category]
+
+    def start_controller(self, category: str, condition: str) -> PlayController:
+        # make sure the symbol category exists
+        if category not in self.play_library.library:
+            raise RuntimeError(f"Cannot find symbol category named '{category}'")
+
+        # make sure we aren't already running a play for this symbol category
+        if self.get_active_controller(category):
+            # already running
+            raise RuntimeError(
+                f"Already running a PlayController for symbol category '{category}'"
+            )
+
+        # make sure the market condition exists
+        if condition not in self.play_library.market_conditions:
+            raise RuntimeError(f"Cannot find market condition named '{condition}'")
+
+        self._active_play_controllers[category] = PlayController()
+
     # TODO property for running plays
+
+
+class PlayCategory:
+    _symbols: Set[Symbol]
+    _ta_algos: set
+    _tm: TimeManager
+    started: bool
+    name: str
+    _play_controllers: Set[PlayController]
+    active_play_controllers: Set[PlayController]
+    play_config: PlayConfig
+    broker: ITradeAPI
+
+    def __init__(
+        self,
+        name: str,
+        symbols: set[Symbol],
+        time_manager: TimeManager,
+        play_config: ControllerConfig,
+        broker: ITradeAPI,
+    ) -> None:
+        self._symbols = symbols
+        self._ta_algos = set()
+        self.started = False
+        self._play_controllers = set()
+        self.name = name
+        self._tm = time_manager
+        self.play_config = play_config
+        self.broker = broker
+
+    def __repr__(self) -> str:
+        return f"SymbolGroup {self.name} ({len(self._symbols)} symbols)"
+
+    @property
+    def active_play_controllers(self) -> set[PlayController]:
+        active = set()
+        for c in self._play_controllers:
+            if len(c.instances) > 0:
+                active.add(c)
+
+        return active
+
+    def start(self):
+        if self.started:
+            raise RuntimeError(f"SymbolGroup {self.name} is already started")
+
+        if len(self._symbols) == 0:
+            raise RuntimeError(
+                f"Failed to SymbolGroup {self.name} - must add symbols to the group first"
+            )
+
+        for s in self._symbols:
+            _new_controller = PlayController(s, self.play_config, self.broker)
+            self._play_controllers.add(_new_controller)
+            _new_controller.start_play()
+
+        self.started = True
+
+    def stop(self, hard_stop: bool = False):
+        for c in self.active_play_controllers:
+            c.stop(hard_stop=hard_stop)
+            if len(c.instances) > 0:
+                log.warning(
+                    f"Tried stopping {c} but still {len(c.instances)} instances running (hard_stop={hard_stop})"
+                )
+
+    def run(self):
+        # need a way to mark retiring play controllers so that they don't get started up again
+        log.info(f"Running for period {self.period}")
+        for c in self.active_play_controllers:
+            c.run()
+
+    @property
+    def play_config(self) -> ControllerConfig:
+        return self._play_config
+
+    @play_config.setter
+    def play_config(self, new_config: ControllerConfig) -> bool:
+        if self.started:
+            raise RuntimeError(
+                f"Can't change play config for {self.name} while play is running"
+            )
+
+        self._play_config = new_config
+
+    @property
+    def broker(self) -> ITradeAPI:
+        return self._broker
+
+    @broker.setter
+    def broker(self, new_broker: ITradeAPI):
+        if self.started:
+            raise RuntimeError(
+                f"Can't change broker for {self.name} while play is running"
+            )
+
+        self._broker = new_broker
+
+    # use a property here to keep broker and symbol in sync!
+    @property
+    def period(self):
+        return self._tm.now
 
 
 store = Ssm()
