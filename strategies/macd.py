@@ -84,7 +84,7 @@ class MacdInstanceTemplate(InstanceTemplate):
     def __init__(
         self,
         name: str,
-        buy_signal_strength: float,
+        buy_signal_strength: float,  #
         take_profit_risk_multiplier: float,
         take_profit_pct_to_sell: float,
         stop_loss_trigger_pct: float,
@@ -92,8 +92,8 @@ class MacdInstanceTemplate(InstanceTemplate):
         stop_loss_hold_intervals: int = 1,
         buy_order_type: str = "limit",
         buy_timeout_intervals: int = 2,
-        check_sma: bool = True,
-        sma_comparison_period: int = 20,
+        check_sma: bool = True,  #
+        sma_comparison_period: int = 20,  #
     ) -> None:
         super().__init__(
             name=name,

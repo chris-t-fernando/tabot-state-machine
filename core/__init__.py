@@ -8,7 +8,7 @@ from .abstracts import (
     Instance,
     InstanceTemplate,
     ControllerConfig,
-    PlayController,
+    SymbolPlay,
 )
 
 from .time_manager import TimeManager

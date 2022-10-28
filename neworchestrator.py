@@ -2,7 +2,7 @@ from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from abc import ABC, abstractmethod
 from core import TimeManager
 from parameter_store import Ssm, IParameterStore
-from core import TimeManager, State, PlayController, ControllerConfig
+from core import TimeManager, State, SymbolPlay, ControllerConfig
 from typing import Set, TypedDict
 from symbol import Symbol
 from strategies.macd import (
@@ -17,6 +17,8 @@ from strategies.macd import (
 import json
 
 import logging
+
+import symbol
 
 stream_handler = logging.StreamHandler()
 formatter = logging.Formatter(
@@ -37,6 +39,7 @@ logging.getLogger("strategies.macd").setLevel(level)
 class PlayConfig:
     symbol_category: str
     market_condition: str
+    name: str
     max_play_size: float
     buy_timeout_intervals: int
     buy_order_type: str
@@ -52,12 +55,15 @@ class PlayConfig:
     state_terminated: State
 
     def __repr__(self) -> str:
-        return f"PlayConfig {self.symbol_category} {self.market_condition}"
+        return (
+            f"PlayConfig '{self.name}' {self.symbol_category} {self.market_condition}"
+        )
 
     def __init__(
         self,
         symbol_category: str,
         market_condition: str,
+        name: str,
         max_play_size: float,
         buy_timeout_intervals: int,
         buy_order_type: str,
@@ -72,6 +78,7 @@ class PlayConfig:
         state_stopping_loss: State,
         state_terminated: State,
     ) -> None:
+        self.name = name
         self.symbol_category = symbol_category
         self.market_condition = market_condition
         self.max_play_size = max_play_size
@@ -100,14 +107,14 @@ class PlayConfig:
         )
 
 
-class SymbolHandler:
-    symbols: set[Symbol]
+class SymbolData:
+    symbols: dict[str, Symbol]
 
     def __init__(self, symbols: set[str]):
-        self.symbols = set()
+        self.symbols = dict()
         for s in symbols:
             s_obj = self._instantiate_symbol(s)
-            self.symbols.add(s_obj)
+            self.symbols[s] = s_obj
 
     def _instantiate_symbol(self, symbol: str) -> bool:
         if symbol in self.symbols:
@@ -136,9 +143,9 @@ class SymbolHandler:
 class PlayLibrary:
     store: IParameterStore
     _store_path: str
-    symbol_categories: set[str]
+    symbol_categories: dict[str, set[str]]
     market_conditions: set[str]
-    symbols: set[str]
+    unique_symbols: set[str]
     library: set[set[PlayConfig]]
 
     def __init__(
@@ -148,9 +155,12 @@ class PlayLibrary:
     ):
         self.store = store
         self._store_path = store_path
-        self.symbol_categories = self._get_categories()
+        category_set = self._get_categories()
+
+        self.symbol_categories = self._enumerate_symbols(symbol_categories=category_set)
         self.market_conditions = self._get_market_conditions()
-        self.symbols = self._enumerate_symbols(self.symbol_categories)
+        self.unique_symbols = self._unique_symbols(self.symbol_categories)
+
         self.library = self._setup_library()
 
     def _get_categories(self) -> set:
@@ -161,15 +171,20 @@ class PlayLibrary:
         path = f"{self._store_path}/market_conditions"
         return set(json.loads(self.store.get(path)))
 
-    def _enumerate_symbols(self, symbol_categories: set[str]) -> set:
-        symbols = set()
+    def _enumerate_symbols(self, symbol_categories: set[str]) -> dict[str, set[str]]:
+        cat_sym_map = dict()
         for cat in symbol_categories:
-            new_symbols = set(
+            cat_sym_map[cat] = set(
                 json.loads(self.store.get(f"{self._store_path}/{cat}/symbols"))
             )
-            symbols |= new_symbols
+        return cat_sym_map
 
-        return symbols
+    def _unique_symbols(self, symbol_categories: dict[str, set[str]]):
+        unique_symbols = set()
+        for cat, symbols in symbol_categories.items():
+            unique_symbols |= symbols
+
+        return unique_symbols
 
     # TODO instantiate symbols, lifecycle them somehow
     def _setup_library(self):
@@ -180,10 +195,21 @@ class PlayLibrary:
         for cat in self.symbol_categories:
             library[cat] = dict()
             for condition in self.market_conditions:
+                # grab the raw json config from store
                 config_json = json.loads(
                     self.store.get(f"{self._store_path}/{cat}/{condition}")
                 )
-                library[cat][condition] = PlayConfig(cat, condition, **config_json)
+
+                # store will return a list of plays, need to instantiate each into a PlayConfig object
+                play_configs = list()
+                for config in config_json:
+                    # TODO PlayConfig is the same thing as core.InstanceTemplate and macd.MacdInstanceTemplate
+                    # clean it up
+                    # make playconfig object configurable via object lookup
+                    # make a playconfig object for macd that supports the additional fields (buy_signal_strength etc)
+                    play_configs.append(PlayConfig(cat, condition, **config))
+
+                library[cat][condition] = play_configs
 
         return library
 
@@ -211,12 +237,6 @@ class WeatherResult:
         def __repr__(self) -> str:
             return f"WeatherItem {str(self.symbols)}"
 
-    def get_all(self):
-        ...
-
-    def get_one(self, key: str):
-        ...
-
 
 class StubWeatherResult(WeatherResult):
     _mock_weather: dict[str, WeatherResult.WeatherItem]
@@ -230,11 +250,11 @@ class StubWeatherResult(WeatherResult):
             symbols={"BTC, ETH"}, condition="choppy"
         )
 
-    def get_all(self):
+    def get_all(self) -> dict[str, WeatherResult]:
         return self._mock_weather
 
-    def get_one(self, key: str):
-        return self._mock_weather[key]
+    def get_one(self, category: str) -> WeatherResult:
+        return self._mock_weather[category]
 
 
 class IWeatherReader(ABC):
@@ -243,7 +263,7 @@ class IWeatherReader(ABC):
         ...
 
     @abstractmethod
-    def get_all(self) -> set[WeatherResult]:
+    def get_all(self) -> dict[str, WeatherResult]:
         ...
 
     @abstractmethod
@@ -257,136 +277,45 @@ class StubWeather(IWeatherReader):
     def __init__(self, tm: TimeManager):
         self._tm = tm
 
-    def get_all(self) -> set[WeatherResult]:
+    def get_all(self) -> dict[str, WeatherResult]:
         return StubWeatherResult().get_all()
 
     def get_one(self, category: str) -> WeatherResult:
         return StubWeatherResult().get_one(category)
 
 
-class PlayOrchestrator:
-    """
-    Startup responsibilities:
-        * Instantiates TimeManager
-        * Read config from store
-        * PlayLibrary object with rules instantiated
-        * Instantiates SymbolHandler
-        * Instantiates Weather
+class SymbolHandler:
+    """Handles SymbolPlay objects"""
 
-    Start responsibilities
-        * Instantiates a PlayHandler based on weather x PlayLibrary
-
-    Run responsibilities:
-        TimeManger tick
-        Checks weather - has it changed?
-        If weather has changed:
-            Tell PlayHandler to shut down
-        Else:
-            Tell PlayHandler to run
-
-    Shutdown responsibilities:
-        Tell PlayHandler to shut down
-
-
-    """
-
-    store: IParameterStore
-    time_manager: TimeManager
-    play_library: PlayLibrary
-    symbol_handler: SymbolHandler
-    weather: IWeatherReader
-    _active_play_controllers: dict[str, PlayConfig]
-    _inactive_play_controllers: set
-
-    def __init__(self, store: IParameterStore) -> None:
-        self._active_play_controllers = dict()
-        self._inactive_play_controllers = set()
-        self.store = store
-        self.time_manager = TimeManager()
-        self.broker = BackTestAPI(time_manager=self.time_manager)
-        self.play_library = PlayLibrary(store)
-        self.symbol_handler = SymbolHandler(self.play_library.symbols)
-        self.weather = StubWeather(self.time_manager)
-
-    def start(self):
-        weather = self.weather.get_all()
-        for cat in self.play_library.symbol_categories:
-            w = weather[cat]
-            play = self.play_library.library[cat][w.condition]
-            pc = PlayCategory(
-                "vanana",
-                symbols=self.symbol_handler.symbols,
-                time_manager=self.time_manager,
-                play_config=play,
-                broker=self.broker,
-            )
-            pc.start()
-
-            print("banana")
-
-    def get_active_controller(self, category: str) -> PlayController:
-        if category not in self.play_library.library:
-            raise RuntimeError(f"Cannot find symbol category named '{category}'")
-
-        if category not in self._active_play_controllers:
-            return False
-
-        return self._active_play_controllers[category]
-
-    def start_controller(self, category: str, condition: str) -> PlayController:
-        # make sure the symbol category exists
-        if category not in self.play_library.library:
-            raise RuntimeError(f"Cannot find symbol category named '{category}'")
-
-        # make sure we aren't already running a play for this symbol category
-        if self.get_active_controller(category):
-            # already running
-            raise RuntimeError(
-                f"Already running a PlayController for symbol category '{category}'"
-            )
-
-        # make sure the market condition exists
-        if condition not in self.play_library.market_conditions:
-            raise RuntimeError(f"Cannot find market condition named '{condition}'")
-
-        self._active_play_controllers[category] = PlayController()
-
-    # TODO property for running plays
-
-
-class PlayCategory:
-    _symbols: Set[Symbol]
+    _symbols: dict[Symbol]
     _ta_algos: set
-    _tm: TimeManager
+    time_manager: TimeManager
     started: bool
-    name: str
-    _play_controllers: Set[PlayController]
-    active_play_controllers: Set[PlayController]
+    _play_controllers: set[SymbolPlay]
+    active_play_controllers: set[SymbolPlay]
     play_config: PlayConfig
     broker: ITradeAPI
 
     def __init__(
         self,
-        name: str,
         symbols: set[Symbol],
         time_manager: TimeManager,
-        play_config: ControllerConfig,
+        play_config: PlayConfig,
         broker: ITradeAPI,
     ) -> None:
         self._symbols = symbols
         self._ta_algos = set()
         self.started = False
         self._play_controllers = set()
-        self.name = name
-        self._tm = time_manager
+        self.time_manager = time_manager
         self.play_config = play_config
         self.broker = broker
 
     def __repr__(self) -> str:
-        return f"SymbolGroup {self.name} ({len(self._symbols)} symbols)"
+        return f"SymbolGroup {self.play_config.name} ({len(self._symbols)} symbols)"
 
     @property
-    def active_play_controllers(self) -> set[PlayController]:
+    def active_play_controllers(self) -> set[SymbolPlay]:
         active = set()
         for c in self._play_controllers:
             if len(c.instances) > 0:
@@ -400,11 +329,11 @@ class PlayCategory:
 
         if len(self._symbols) == 0:
             raise RuntimeError(
-                f"Failed to SymbolGroup {self.name} - must add symbols to the group first"
+                f"Failed to start SymbolGroup {self.name} - must add symbols to the group first"
             )
 
-        for s in self._symbols:
-            _new_controller = PlayController(s, self.play_config, self.broker)
+        for s, s_obj in self._symbols.items():
+            _new_controller = SymbolPlay(s_obj, self.play_config, self.broker)
             self._play_controllers.add(_new_controller)
             _new_controller.start_play()
 
@@ -453,7 +382,155 @@ class PlayCategory:
     # use a property here to keep broker and symbol in sync!
     @property
     def period(self):
-        return self._tm.now
+        return self.time_manager.now
+
+
+class CategoryHandler:
+    """
+    1:m symbols, 1:m play configs, 1:1 weather
+    Handles the symbols that belong to one category that will have 1:m play_configs applied
+    Role is to enumerate play_configs to instantiate SymbolHandlers
+    """
+
+    symbols: list[Symbol]
+    play_configs: list[PlayConfig]
+    symbol_handlers: list[SymbolHandler]
+    broker: ITradeAPI
+    time_manager: TimeManager
+
+    def __init__(
+        self,
+        symbols: set[Symbol],
+        play_configs: list[PlayConfig],
+        broker: ITradeAPI,
+        time_manager: TimeManager,
+    ):
+        self.symbols = symbols
+        self.play_configs = play_configs
+        self.symbol_handlers = []
+        self.broker = broker
+        self.time_manager = time_manager
+
+        for config in play_configs:
+            self.symbol_handlers.append(
+                SymbolHandler(
+                    symbols=symbols,
+                    play_config=config,
+                    broker=broker,
+                    time_manager=time_manager,
+                )
+            )
+
+    def start(self):
+        for h in self.symbol_handlers:
+            h.start()
+
+
+class PlayOrchestrator:
+    """
+    Startup responsibilities:
+        * Instantiates TimeManager
+        * Read config from store
+        * PlayLibrary object with rules instantiated
+        * Instantiates SymbolHandler
+        * Instantiates Weather
+
+    Start responsibilities
+        * Instantiates a PlayHandler based on weather x PlayLibrary
+
+    Run responsibilities:
+        TimeManger tick
+        Checks weather - has it changed?
+        If weather has changed:
+            Tell PlayHandler to shut down
+        Else:
+            Tell PlayHandler to run
+
+    Shutdown responsibilities:
+        Tell PlayHandler to shut down
+
+
+    """
+
+    store: IParameterStore
+    time_manager: TimeManager
+    play_library: PlayLibrary
+    symbol_data: SymbolData
+    weather: IWeatherReader
+    _active_category_handlers: dict[str, CategoryHandler]
+    _inactive_category_handlers: set
+
+    def __init__(self, store: IParameterStore) -> None:
+        self._active_category_handlers = dict()
+        self._inactive_category_handlers = set()
+        self.store = store
+        self.time_manager = TimeManager()
+        self.broker = BackTestAPI(time_manager=self.time_manager)
+        self.play_library = PlayLibrary(store)
+        self.symbol_data = SymbolData(self.play_library.unique_symbols)
+        self.weather = StubWeather(self.time_manager)
+
+    def start(self):
+        weather = self.weather.get_all()
+        for cat in self.play_library.symbol_categories:
+            cat_symbols_obj = dict()
+            w = weather[cat].condition
+            plays = self.play_library.library[cat][w]
+            cat_symbols_str = self.play_library.symbol_categories[cat]
+
+            # TODO this has no business being here - it should be part of PlayLibrary
+            for s in cat_symbols_str:
+                cat_symbols_obj[s] = self.symbol_data.symbols[s]
+
+            c = CategoryHandler(
+                symbols=cat_symbols_obj,
+                play_configs=plays,
+                broker=self.broker,
+                time_manager=self.time_manager,
+            )
+            c.start()
+
+            pc = SymbolHandler(
+                "vanana",
+                symbols=self.symbol_data.symbols,
+                time_manager=self.time_manager,
+                play_config=plays,
+                broker=self.broker,
+            )
+            pc.start()
+
+            print("banana")
+
+    def get_active_handler(self, category: str) -> SymbolPlay:
+        if category not in self.play_library.library:
+            raise RuntimeError(f"Cannot find symbol category named '{category}'")
+
+        if category not in self._active_category_handlers:
+            return False
+
+        return self._active_category_handlers[category]
+
+    def start_handler(self, category: str, condition: str) -> SymbolPlay:
+        # make sure the symbol category exists
+        if category not in self.play_library.library:
+            raise RuntimeError(f"Cannot find symbol category named '{category}'")
+
+        # make sure we aren't already running a play for this symbol category
+        if self.get_active_handler(category):
+            # already running
+            raise RuntimeError(
+                f"Already running a PlayController for symbol category '{category}'"
+            )
+
+        # make sure the market condition exists
+        if condition not in self.play_library.market_conditions:
+            raise RuntimeError(f"Cannot find market condition named '{condition}'")
+
+        self._active_category_handlers[category] = CategoryHandler(
+            symbols=self.play_library.library
+        )
+
+    # TODO property for running plays
 
 
 store = Ssm()

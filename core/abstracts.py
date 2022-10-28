@@ -679,7 +679,7 @@ class Instance(ABC):
     def __init__(
         self, template: InstanceTemplate, play_controller, state=None, state_args=None
     ) -> None:
-        self.parent_controller: PlayController
+        self.parent_controller: SymbolPlay
         self.config = template
         self.parent_controller = play_controller
         self.broker = play_controller.broker
@@ -995,38 +995,37 @@ class InstanceList:
         return gain
 
 
-class PlayController(ABC):
+class SymbolPlay(ABC):
+    instances: List[Instance]
+    symbol: Symbol
+    play_config: ControllerConfig
+    broker: ITradeAPI
+    play_instance_class: Instance
+    play_id: str
+    terminated_instances: List[Instance]
+
     def __init__(
         self,
         symbol: Symbol,
         play_config: ControllerConfig,
-        broker,
+        broker: ITradeAPI,
         play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
         self.play_config = play_config
-        self._inject_common_config()
         self.play_id = self._generate_play_id()
         self.broker = broker
         # PlayInstance class to be use - can be overridden to enable extension
         self.play_instance_class = play_instance_class
-        self.instances: List[Instance]
         self.instances = []
         self.terminated_instances = []
-
-    # TODO previously you had a config object that had a list that had all the different parameters
-    # now you read config from SSM that should be a json dict with each of the parameters and states in it already
-    # so no need to do this permutation stuff - just iterate through the config documents and start up instances
-    def _inject_common_config(self):
-        for template in self.play_config.play_templates:
-            template.buy_budget = self.play_config.buy_budget
 
     def start_play(self):
         if len(self.instances) > 0:
             raise RuntimeError("Already started plays, can't call start_play() twice")
 
-        for template in self.play_config.play_templates:
-            self.instances.append(self.play_instance_class(template, self))
+        # for template in self.play_config.play_templates:
+        self.instances.append(self.play_instance_class(self.play_config, self))
 
         self.run()
 
