@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from symbol import Symbol, SymbolData, InvalidQuantity, InvalidPrice
+from core import PlayConfig, SymbolPlay
 from datetime import datetime
 import uuid
 import logging
@@ -7,7 +8,6 @@ from math import floor
 from broker_api import ITradeAPI, IOrderResult
 from logbeam import CloudWatchLogsHandler
 from pythonjsonlogger import jsonlogger
-from typing import List
 
 log = logging.getLogger(__name__)
 
@@ -48,33 +48,33 @@ class InvalidTakeProfit(Exception):
     ...
 
 
-class InstanceTemplate(ABC):
-    def __init__(
-        self,
-        name: str,
-        buy_signal_strength: float,
-        take_profit_risk_multiplier: float,
-        take_profit_pct_to_sell: float,
-        stop_loss_trigger_pct: float,
-        stop_loss_type: str = "market",
-        stop_loss_hold_intervals: int = 1,
-        buy_order_type: str = "limit",
-        buy_timeout_intervals: int = 2,
-    ) -> None:
-        self.name = name
-        self.buy_signal_strength = buy_signal_strength
-        self.buy_order_type = buy_order_type
-        self.take_profit_risk_multiplier = take_profit_risk_multiplier
-        self.take_profit_pct_to_sell = take_profit_pct_to_sell
-        self.stop_loss_trigger_pct = stop_loss_trigger_pct
-        self.stop_loss_type = stop_loss_type
-        self.stop_loss_hold_intervals = stop_loss_hold_intervals
-        self.buy_timeout_intervals = buy_timeout_intervals
+# class InstanceTemplate(ABC):
+#    def __init__(
+#        self,
+#        name: str,
+#        buy_signal_strength: float,
+#        take_profit_risk_multiplier: float,
+#        take_profit_pct_to_sell: float,
+#        stop_loss_trigger_pct: float,
+#        stop_loss_type: str = "market",
+#        stop_loss_hold_intervals: int = 1,
+#        buy_order_type: str = "limit",
+#        buy_timeout_intervals: int = 2,
+#    ) -> None:
+#        self.name = name
+#        self.buy_signal_strength = buy_signal_strength
+#        self.buy_order_type = buy_order_type
+#        self.take_profit_risk_multiplier = take_profit_risk_multiplier
+#        self.take_profit_pct_to_sell = take_profit_pct_to_sell
+#        self.stop_loss_trigger_pct = stop_loss_trigger_pct
+#        self.stop_loss_type = stop_loss_type
+#        self.stop_loss_hold_intervals = stop_loss_hold_intervals
+#        self.buy_timeout_intervals = buy_timeout_intervals
+#
+#    def __repr__(self) -> str:
+#        return f"<{type(self).__name__} '{self.name}'>"
 
-    def __repr__(self) -> str:
-        return f"<{type(self).__name__} '{self.name}'>"
-
-
+# TODO fix circular imports and then finish merging PlayConfig with InstanceConfig, noting you made new parameters
 class State(ABC):
     STATE_STAY = 0
     STATE_SPLIT = 1
@@ -83,7 +83,7 @@ class State(ABC):
     symbol: Symbol
     symbol_str: str
     ohlc: SymbolData
-    config: InstanceTemplate
+    config: PlayConfig
     broker: ITradeAPI
     log: logging.Logger
 
@@ -560,34 +560,6 @@ class StateTerminated(State):
         self.parent_instance.handler.close()
 
 
-class ControllerConfig(ABC):
-    state_waiting: State = None
-    state_entering_position: State = None
-    state_taking_profit: State = None
-    state_stopping_loss: State = None
-    state_terminated: State = None
-    buy_budget: float = None
-    play_templates: list = None
-
-    def __init__(
-        self,
-        state_waiting: State,
-        state_entering_position: State,
-        state_taking_profit: State,
-        state_stopping_loss: State,
-        state_terminated: State,
-        buy_budget: float,
-        play_templates: list,
-    ) -> None:
-        self.state_waiting = state_waiting
-        self.state_entering_position = state_entering_position
-        self.state_taking_profit = state_taking_profit
-        self.state_stopping_loss = state_stopping_loss
-        self.state_terminated = state_terminated
-        self.buy_budget = buy_budget
-        self.play_templates = play_templates
-
-
 # there is 10000% a better way to do this but python's logging module is a warcrime
 # lord forgive me
 # this whole thing is just so that I don't have to repeatedly specify variables to output as json into the logs
@@ -677,7 +649,7 @@ class ShonkyLog:
 
 class Instance(ABC):
     def __init__(
-        self, template: InstanceTemplate, play_controller, state=None, state_args=None
+        self, template: PlayConfig, play_controller, state=None, state_args=None
     ) -> None:
         self.parent_controller: SymbolPlay
         self.config = template
@@ -993,104 +965,3 @@ class InstanceList:
         for i in self.instances:
             gain += i.total_gain
         return gain
-
-
-class SymbolPlay(ABC):
-    instances: List[Instance]
-    symbol: Symbol
-    play_config: ControllerConfig
-    broker: ITradeAPI
-    play_instance_class: Instance
-    play_id: str
-    terminated_instances: List[Instance]
-
-    def __init__(
-        self,
-        symbol: Symbol,
-        play_config: ControllerConfig,
-        broker: ITradeAPI,
-        play_instance_class: Instance = Instance,
-    ) -> None:
-        self.symbol = symbol
-        self.play_config = play_config
-        self.play_id = self._generate_play_id()
-        self.broker = broker
-        # PlayInstance class to be use - can be overridden to enable extension
-        self.play_instance_class = play_instance_class
-        self.instances = []
-        self.terminated_instances = []
-
-    def start_play(self):
-        if len(self.instances) > 0:
-            raise RuntimeError("Already started plays, can't call start_play() twice")
-
-        # for template in self.play_config.play_templates:
-        self.instances.append(self.play_instance_class(self.play_config, self))
-
-        self.run()
-
-    def register_instance(self, new_instance):
-        self.instances.append(new_instance)
-
-    def _generate_play_id(self, length: int = 6):
-        return "play-" + self.symbol.yf_symbol + uuid.uuid4().hex[:length].upper()
-
-    @property
-    def total_gain(self):
-        gain = 0
-        for i in self.instances:
-            if i.total_buy_value != 0:
-                gain += i.total_gain
-            else:
-                log.debug(
-                    f"Ignoring instance {i} since it has not taken profit or stopped loss yet"
-                )
-
-        return gain
-
-    # @property
-    def stop(self, hard_stop: bool = False):
-        for i in self.instances:
-            i.stop(hard_stop=hard_stop)
-
-    # TODO rewrite this to use @property active instances
-    def run(self):
-        new_instances = []
-        retained_instances = []
-        for i in self.instances:
-            i.run()
-
-            if isinstance(i.state, StateTerminated):
-                # if this instance is terminated, spin up a new one
-                self.terminated_instances.append(i)
-                new_instances.append(self.play_instance_class(i.config, self))
-                # gain = self.total_gain
-                # print(f"Total gain for this symbol: {gain:,.2f}")
-
-            else:
-                retained_instances.append(i)
-
-        updated_instances = new_instances + retained_instances
-        self.instances = updated_instances
-
-        # self.get_instances(self.instances[0].config)
-
-    def fork_instance(self, instance: Instance, new_state: State, **kwargs):
-        kwargs["previous_state"] = instance.state
-        self.instances.append(
-            self.play_instance_class(
-                template=instance.config,
-                play_controller=self,
-                state=new_state,
-                state_args=kwargs,
-            )
-        )
-
-    def get_instances(self, template: InstanceTemplate):
-        all_instances = self.instances + self.terminated_instances
-        matched_instances = InstanceList()
-        for i in all_instances:
-            if i.config == template:
-                matched_instances.append(i)
-
-        return matched_instances
