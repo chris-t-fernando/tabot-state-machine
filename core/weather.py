@@ -1,3 +1,7 @@
+from .time_manager import ITimeManager
+from abc import ABC, abstractmethod
+
+
 class WeatherResult:
     """
     SymbolCategory
@@ -56,9 +60,9 @@ class IWeatherReader(ABC):
 
 
 class StubWeather(IWeatherReader):
-    _tm: TimeManager
+    _tm: ITimeManager
 
-    def __init__(self, tm: TimeManager):
+    def __init__(self, tm: ITimeManager):
         self._tm = tm
 
     def get_all(self) -> dict[str, WeatherResult]:

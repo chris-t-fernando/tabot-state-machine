@@ -20,8 +20,8 @@ from core import (
     StateTerminated,
     StateStoppingLoss,
     StateTakingProfit,
+    TimeManager,
 )
-from core import TimeManager
 import btalib
 from time import sleep
 from typing import Set

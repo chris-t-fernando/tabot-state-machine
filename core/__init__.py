@@ -1,4 +1,4 @@
-from .time_manager import TimeManager
+from .time_manager import TimeManager, ITimeManager
 from .instance_state import (
     StateWaiting,
     StateEnteringPosition,
@@ -8,10 +8,10 @@ from .instance_state import (
     StateTerminated,
     Instance,
     InstanceList,
-)
-
-from .orchestrator import (
     PlayConfig,
+    # )
+    #
+    # from .orchestrator import (
     ControllerConfig,
     SymbolPlay,
     SymbolHandler,

@@ -1,10 +1,49 @@
+from abc import ABC, abstractmethod
 from typing import Set
 from symbol import Symbol
 from pandas import Timestamp
 from dateutil.relativedelta import relativedelta
 
 
-class TimeManager:
+class ITimeManager(ABC):
+    @abstractmethod
+    def __init__(self, symbol_list: list = None, interval: int = 300) -> None:
+        ...
+
+    @abstractmethod
+    def add_symbol(self, symbol: Symbol) -> bool:
+        ...
+
+    @abstractmethod
+    def add_symbols(self, symbol_list: list) -> bool:
+        ...
+
+    @property
+    @abstractmethod
+    def first(self):
+        ...
+
+    @property
+    @abstractmethod
+    def last(self):
+        ...
+
+    @property
+    @abstractmethod
+    def now(self):
+        ...
+
+    @now.setter
+    @abstractmethod
+    def now(self, new_date):
+        ...
+
+    @abstractmethod
+    def tick(self):
+        ...
+
+
+class TimeManager(ITimeManager):
     def __init__(self, symbol_list: list = None, interval: int = 300) -> None:
         self._symbols: Set[Symbol]
         self._symbols = set()
