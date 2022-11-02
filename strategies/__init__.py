@@ -5,5 +5,6 @@ from .macd import (
     MacdStateWaiting,
     MacdStateTerminated,
     MacdTA,
-    MacdInstanceTemplate,
 )
+
+from .macd_play_config import MacdPlayConfig

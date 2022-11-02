@@ -1,6 +1,9 @@
+import __main__
 from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from parameter_store import Ssm
 from core import PlayOrchestrator
+
+# from strategies.macd import MacdPlayConfig
 import logging
 
 stream_handler = logging.StreamHandler()

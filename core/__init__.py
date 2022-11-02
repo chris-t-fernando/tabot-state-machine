@@ -1,5 +1,5 @@
 from .time_manager import TimeManager, ITimeManager
-from .instance_state import (
+from .orchestrator import (
     StateWaiting,
     StateEnteringPosition,
     State,
@@ -8,7 +8,6 @@ from .instance_state import (
     StateTerminated,
     Instance,
     InstanceList,
-    PlayConfig,
     # )
     #
     # from .orchestrator import (
@@ -19,5 +18,6 @@ from .instance_state import (
     PlayLibrary,
     PlayOrchestrator,
 )
+from .play_config import PlayConfig
 
 from .weather import IWeatherReader, StubWeather

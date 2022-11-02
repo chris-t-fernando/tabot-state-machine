@@ -6,7 +6,6 @@ from core import (
     StateTakingProfit,
     StateTerminated,
     Instance,
-    InstanceTemplate,
 )
 
 import btalib
@@ -78,36 +77,6 @@ class MacdTA:
         df["macd_crossover"] = df.macd_above_signal.ne(df.macd_above_signal.shift())
 
         return MacdTA.MacdColumns(df)
-
-
-class MacdInstanceTemplate(InstanceTemplate):
-    def __init__(
-        self,
-        name: str,
-        buy_signal_strength: float,  #
-        take_profit_risk_multiplier: float,
-        take_profit_pct_to_sell: float,
-        stop_loss_trigger_pct: float,
-        stop_loss_type: str = "market",
-        stop_loss_hold_intervals: int = 1,
-        buy_order_type: str = "limit",
-        buy_timeout_intervals: int = 2,
-        check_sma: bool = True,  #
-        sma_comparison_period: int = 20,  #
-    ) -> None:
-        super().__init__(
-            name=name,
-            buy_signal_strength=buy_signal_strength,
-            buy_order_type=buy_order_type,
-            take_profit_risk_multiplier=take_profit_risk_multiplier,
-            take_profit_pct_to_sell=take_profit_pct_to_sell,
-            stop_loss_trigger_pct=stop_loss_trigger_pct,
-            stop_loss_type=stop_loss_type,
-            stop_loss_hold_intervals=stop_loss_hold_intervals,
-            buy_timeout_intervals=buy_timeout_intervals,
-        )
-        self.check_sma = check_sma
-        self.sma_comparison_period = sma_comparison_period
 
 
 class MacdStateWaiting(StateWaiting):
