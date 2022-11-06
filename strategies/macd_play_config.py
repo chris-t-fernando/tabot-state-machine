@@ -2,9 +2,11 @@ from core import PlayConfig
 
 
 class MacdPlayConfig(PlayConfig):
+    __tabot_strategy__: bool = True
+
     def __init__(
         self,
-        buy_signal_strength: float,
+        buy_signal_strength: float = 1,
         check_sma: bool = True,
         sma_comparison_period: int = 20,
         **kwargs,

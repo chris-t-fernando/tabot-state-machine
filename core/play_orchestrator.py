@@ -8,6 +8,7 @@ from .weather import IWeatherReader, StubWeather
 from .category_handler import CategoryHandler
 from .symbol_handler import SymbolHandler
 from .symbol_play import SymbolPlay
+from .strategy_handler import StrategyHandler
 
 
 class PlayOrchestrator:
@@ -44,13 +45,16 @@ class PlayOrchestrator:
     _active_category_handlers: dict[str, CategoryHandler]
     _inactive_category_handlers: set
 
-    def __init__(self, store: IParameterStore) -> None:
+    def __init__(
+        self, store: IParameterStore, strategy_handler: StrategyHandler
+    ) -> None:
         self._active_category_handlers = dict()
         self._inactive_category_handlers = set()
         self.store = store
+        self.strategy_handler = strategy_handler
         self.time_manager = TimeManager()
         self.broker = BackTestAPI(time_manager=self.time_manager)
-        self.play_library = PlayLibrary(store)
+        self.play_library = PlayLibrary(store, strategy_handler)
         self.symbol_data = SymbolData(self.play_library.unique_symbols)
         self.weather = StubWeather(self.time_manager)
 

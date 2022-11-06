@@ -8,6 +8,7 @@ from .state_terminated import StateTerminated
 from .instance_list import InstanceList
 from .instance import Instance
 from .controller_config import ControllerConfig
+from .strategy_handler import StrategyHandler
 from .symbol_data import SymbolData
 from .symbol_handler import SymbolHandler
 from .symbol_play import SymbolPlay

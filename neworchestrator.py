@@ -2,6 +2,15 @@ import __main__
 from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from parameter_store import Ssm
 from core import PlayOrchestrator
+from core import StrategyHandler
+from strategies import (
+    MacdPlayConfig,
+    MacdStateEnteringPosition,
+    MacdStateStoppingLoss,
+    MacdStateTakingProfit,
+    MacdStateTerminated,
+    MacdStateWaiting,
+)
 
 # from strategies.macd import MacdPlayConfig
 import logging
@@ -22,19 +31,8 @@ logging.getLogger("core.instance_state").setLevel(level)
 logging.getLogger("core.orchestrator").setLevel(level)
 logging.getLogger("strategies.macd").setLevel(level)
 
+sh = StrategyHandler(globals().copy())
 
 store = Ssm()
-po = PlayOrchestrator(store)
+po = PlayOrchestrator(store, sh)
 po.start()
-
-
-#    def _enumerate_symbols(self):
-#        for cat in self.symbol_categories:
-#            new_symbols = set(
-#                json.loads(self.store.get(f"{self._store_path}/{cat}/symbols"))
-#            )
-#            if len(new_symbols & self.uninstantiated_symbols) > 0:
-#                log.warning(
-#                    f"Symbol appears in more than one category: {new_symbols&self.uninstantiated_symbols}"
-#                )
-#            self.uninstantiated_symbols |= new_symbols

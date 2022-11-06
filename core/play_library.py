@@ -1,5 +1,6 @@
 from parameter_store import IParameterStore
 from .play_config import PlayConfig
+from core import StrategyHandler
 import json
 
 
@@ -10,13 +11,16 @@ class PlayLibrary:
     market_conditions: set[str]
     unique_symbols: set[str]
     library: set[set[PlayConfig]]
+    strategy_handler: StrategyHandler
 
     def __init__(
         self,
         store: IParameterStore,
+        strategy_handler: StrategyHandler,
         store_path: str = "/tabot/play_library/paper",
     ):
         self.store = store
+        self.strategy_handler = strategy_handler
         self._store_path = store_path
         category_set = self._get_categories()
 
@@ -51,10 +55,10 @@ class PlayLibrary:
 
     # TODO find a way to access strategy config objects where they're loaded
     def _resolve_play_config_object(self, play_config_str: str = None):
+
         if play_config_str:
-            g = globals().copy()
-            if play_config_str in g.keys():
-                return g[play_config_str]
+            if play_config_str in self.strategy_handler:
+                return self.strategy_handler[play_config_str]
             else:
                 raise RuntimeError(
                     f"Unable to find PlayConfig object '{play_config_str}' in globals(). Did you import it?"
@@ -94,7 +98,14 @@ class PlayLibrary:
                         play_config_str=config_str
                     )
 
-                    play_configs.append(config_object(cat, condition, **config))
+                    play_configs.append(
+                        config_object(
+                            symbol_category=cat,
+                            market_condition=condition,
+                            strategy_handler=self.strategy_handler,
+                            **config,
+                        )
+                    )
 
                 library[cat][condition] = play_configs
 

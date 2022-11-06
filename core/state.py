@@ -8,6 +8,8 @@ import logging
 # TODO fix circular imports and then finish merging PlayConfig with InstanceConfig, noting you made new parameters
 class State(ABC):
 
+    __tabot_strategy__: bool = True
+
     STATE_STAY = 0
     STATE_SPLIT = 1
     STATE_MOVE = 2

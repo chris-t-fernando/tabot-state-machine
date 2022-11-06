@@ -1,4 +1,5 @@
 from typing import Any
+from core.strategy_handler import StrategyHandler
 
 
 class PlayConfig:
@@ -18,6 +19,8 @@ class PlayConfig:
     state_taking_profit: Any
     state_stopping_loss: Any
     state_terminated: Any
+    config_object: Any
+    strategy_handler: StrategyHandler
 
     def __repr__(self) -> str:
         return (
@@ -42,6 +45,8 @@ class PlayConfig:
         state_taking_profit,
         state_stopping_loss,
         state_terminated,
+        config_object,
+        strategy_handler: StrategyHandler,
     ) -> None:
         self.name = name
         self.symbol_category = symbol_category
@@ -54,6 +59,7 @@ class PlayConfig:
         self.stop_loss_type = stop_loss_type
         self.stop_loss_trigger_pct = stop_loss_trigger_pct
         self.stop_loss_hold_intervals = stop_loss_hold_intervals
+        self.strategy_handler = strategy_handler
         self.state_waiting = self._state_str_to_object(state_waiting)
         self.state_entering_position = self._state_str_to_object(
             state_entering_position
@@ -61,11 +67,12 @@ class PlayConfig:
         self.state_taking_profit = self._state_str_to_object(state_taking_profit)
         self.state_stopping_loss = self._state_str_to_object(state_stopping_loss)
         self.state_terminated = self._state_str_to_object(state_terminated)
+        self.config_object = self._state_str_to_object(config_object)
 
     def _state_str_to_object(self, state_str):
-        g = globals().copy()
-        if state_str in g.keys():
-            return g[state_str]
+
+        if state_str in self.strategy_handler:
+            return self.strategy_handler[state_str]
 
         raise RuntimeError(
             f"Could not find {state_str} in globals() - did you import it?"
