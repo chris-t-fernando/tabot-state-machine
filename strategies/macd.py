@@ -20,6 +20,8 @@ log = logging.getLogger(__name__)
 
 
 class MacdTA:
+    __tabot_strategy__: bool = True
+
     class MacdColumns:
         df: pd.DataFrame
 
@@ -46,7 +48,8 @@ class MacdTA:
         else:
             raise ValueError(f"Interval {interval} is not implemented")
 
-    def macd(ohlc_data, interval="5m"):
+    def do_ta(ohlc_data, interval="5m"):
+        # def __init__(self, ohlc_data, interval="5m"):
         btadf = btalib.macd(ohlc_data).df
 
         # change names to avoid collision

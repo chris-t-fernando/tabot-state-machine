@@ -10,9 +10,9 @@ from strategies import (
     MacdStateTakingProfit,
     MacdStateTerminated,
     MacdStateWaiting,
+    MacdTA,
 )
 
-# from strategies.macd import MacdPlayConfig
 import logging
 
 stream_handler = logging.StreamHandler()

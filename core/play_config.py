@@ -21,6 +21,7 @@ class PlayConfig:
     state_terminated: Any
     config_object: Any
     strategy_handler: StrategyHandler
+    algos: Any
 
     def __repr__(self) -> str:
         return (
@@ -47,6 +48,7 @@ class PlayConfig:
         state_terminated,
         config_object,
         strategy_handler: StrategyHandler,
+        algos,
     ) -> None:
         self.name = name
         self.symbol_category = symbol_category

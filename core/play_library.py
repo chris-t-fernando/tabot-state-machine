@@ -7,6 +7,7 @@ import json
 class PlayLibrary:
     store: IParameterStore
     _store_path: str
+    algos: set
     symbol_categories: dict[str, set[str]]
     market_conditions: set[str]
     unique_symbols: set[str]
@@ -19,6 +20,7 @@ class PlayLibrary:
         strategy_handler: StrategyHandler,
         store_path: str = "/tabot/play_library/paper",
     ):
+        self.algos = set()
         self.store = store
         self.strategy_handler = strategy_handler
         self._store_path = store_path
@@ -54,14 +56,15 @@ class PlayLibrary:
         return unique_symbols
 
     # TODO find a way to access strategy config objects where they're loaded
-    def _resolve_play_config_object(self, play_config_str: str = None):
+    def _resolve_str_to_object(self, object_string: str = None):
 
-        if play_config_str:
-            if play_config_str in self.strategy_handler:
-                return self.strategy_handler[play_config_str]
+        if object_string:
+            # TODO in strategy_handler is too ambiguous - should be strategy_handler.objects or something
+            if object_string in self.strategy_handler:
+                return self.strategy_handler[object_string]
             else:
                 raise RuntimeError(
-                    f"Unable to find PlayConfig object '{play_config_str}' in globals(). Did you import it?"
+                    f"Unable to find class '{object_string}' in globals(). Did you import it?"
                 )
 
         else:
@@ -94,9 +97,14 @@ class PlayLibrary:
                     else:
                         config_str = None
 
-                    config_object = self._resolve_play_config_object(
-                        play_config_str=config_str
+                    config_object = self._resolve_str_to_object(
+                        object_string=config_str
                     )
+
+                    for a in config["algos"]:
+                        # hold on to each algo
+                        algo_obj = self._resolve_str_to_object(object_string=a)
+                        self.algos.add(algo_obj)
 
                     play_configs.append(
                         config_object(

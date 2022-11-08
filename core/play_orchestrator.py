@@ -54,8 +54,10 @@ class PlayOrchestrator:
         self.strategy_handler = strategy_handler
         self.time_manager = TimeManager()
         self.broker = BackTestAPI(time_manager=self.time_manager)
-        self.play_library = PlayLibrary(store, strategy_handler)
-        self.symbol_data = SymbolData(self.play_library.unique_symbols)
+        self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)
+        self.symbol_data = SymbolData(
+            self.play_library.unique_symbols, self.play_library.algos
+        )
         self.weather = StubWeather(self.time_manager)
 
     def start(self):
@@ -78,14 +80,14 @@ class PlayOrchestrator:
             )
             c.start()
 
-            pc = SymbolHandler(
-                "vanana",
-                symbols=self.symbol_data.symbols,
-                time_manager=self.time_manager,
-                play_config=plays,
-                broker=self.broker,
-            )
-            pc.start()
+            # pc = SymbolHandler(
+            #    "vanana",
+            #    symbols=self.symbol_data.symbols,
+            #    time_manager=self.time_manager,
+            #    play_config=plays,
+            #    broker=self.broker,
+            # )
+            # pc.start()
 
             print("banana")
 
