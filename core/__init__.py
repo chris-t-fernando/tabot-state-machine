@@ -16,5 +16,6 @@ from .play_library import PlayLibrary
 from .play_orchestrator import PlayOrchestrator
 from .play_config import PlayConfig
 from .weather import IWeatherReader, StubWeather
+from .ita import ITA
 
 from .exceptions import *

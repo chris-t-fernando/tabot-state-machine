@@ -11,6 +11,7 @@ from strategies import (
     MacdStateTerminated,
     MacdStateWaiting,
     MacdTA,
+    SMA,
 )
 
 import logging
@@ -36,3 +37,4 @@ sh = StrategyHandler(globals().copy())
 store = Ssm()
 po = PlayOrchestrator(store, sh)
 po.start()
+po.run()

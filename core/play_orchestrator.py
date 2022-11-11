@@ -121,3 +121,16 @@ class PlayOrchestrator:
         )
 
     # TODO property for running plays
+
+    """
+    Run responsibilities:
+        TimeManger tick
+        Checks weather - has it changed?
+        If weather has changed:
+            Tell PlayHandler to shut down
+        Else:
+            Tell PlayHandler to run
+    """
+
+    def run(self):
+        ...

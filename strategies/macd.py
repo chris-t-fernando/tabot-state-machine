@@ -6,6 +6,7 @@ from core import (
     StateTakingProfit,
     StateTerminated,
     Instance,
+    ITA,
 )
 
 import btalib
@@ -19,7 +20,7 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class MacdTA:
+class MacdTA(ITA):
     __tabot_strategy__: bool = True
 
     class MacdColumns:
@@ -48,7 +49,7 @@ class MacdTA:
         else:
             raise ValueError(f"Interval {interval} is not implemented")
 
-    def do_ta(ohlc_data, interval="5m"):
+    def do_ta(ohlc_data: pd.DataFrame):
         # def __init__(self, ohlc_data, interval="5m"):
         btadf = btalib.macd(ohlc_data).df
 
