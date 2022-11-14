@@ -1,5 +1,6 @@
 from .time_manager import ITimeManager
 from abc import ABC, abstractmethod
+import math
 
 
 class WeatherResult:
@@ -29,19 +30,38 @@ class WeatherResult:
 class StubWeatherResult(WeatherResult):
     _mock_weather: dict[str, WeatherResult.WeatherItem]
 
-    def __init__(self) -> None:
+    def __init__(self, result) -> None:
+        self.__result = result
         self._mock_weather = dict()
         self._mock_weather["crypto_alt"] = self.WeatherItem(
-            symbols={"ADA, AVAX"}, condition="bull"
+            symbols={"ADA, AVAX"}, condition=result
         )
         self._mock_weather["crypto_stable"] = self.WeatherItem(
-            symbols={"BTC, ETH"}, condition="choppy"
+            symbols={"BTC, ETH"}, condition=result
         )
 
     def get_all(self) -> dict[str, WeatherResult]:
+
+        self._mock_weather["crypto_alt"] = self.WeatherItem(
+            symbols={"ADA, AVAX"},
+            condition=self.__result,
+        )
+        self._mock_weather["crypto_stable"] = self.WeatherItem(
+            symbols={"ADA, AVAX"},
+            condition=self.__result,
+        )
         return self._mock_weather
 
     def get_one(self, category: str) -> WeatherResult:
+        self.__iteration_count += 1
+        self._mock_weather["crypto_alt"] = self.WeatherItem(
+            symbols={"ADA, AVAX"},
+            condition=self.__result,
+        )
+        self._mock_weather["crypto_stable"] = self.WeatherItem(
+            symbols={"ADA, AVAX"},
+            condition=self.__result,
+        )
         return self._mock_weather[category]
 
 
@@ -63,10 +83,15 @@ class StubWeather(IWeatherReader):
     _tm: ITimeManager
 
     def __init__(self, tm: ITimeManager):
+        self.__iteration_count = 0
+        self.__conditions = ["choppy", "bull", "bear"]
         self._tm = tm
 
     def get_all(self) -> dict[str, WeatherResult]:
-        return StubWeatherResult().get_all()
+        self.__iteration_count += 1
+        condition = self.__conditions[math.floor(self.__iteration_count / 1000 % 3)]
+        return StubWeatherResult(condition).get_all()
 
     def get_one(self, category: str) -> WeatherResult:
-        return StubWeatherResult().get_one(category)
+        condition = self.__conditions[math.floor(self.__iteration_count / 1000 % 3)]
+        return StubWeatherResult(condition).get_one(category)

@@ -76,21 +76,8 @@ class PlayOrchestrator:
     def start(self):
         self._last_weather = self.weather.get_all()
         for cat in self.play_library.symbol_categories:
-            # cat_symbols_obj = dict()
             w = self._last_weather[cat].condition
-            # plays = self._get_plays(cat, w)
-            # cat_symbols_obj = self._get_symbol_obj(cat)
-
             self.start_handler(cat, w)
-            # c = CategoryHandler(
-            #    symbols=cat_symbols_obj,
-            #    play_configs=plays,
-            #    broker=self.broker,
-            #    time_manager=self.time_manager,
-            # )
-            # c.start()
-
-        print("banana")
 
     def _get_plays(self, category, weather):
         return self.play_library.library[category][weather]
@@ -128,7 +115,10 @@ class PlayOrchestrator:
                 self.start_handler(category=cat, condition=new_w)
             else:
                 # weather has not changed
-                print(f"Weather for {cat} has not changed (still is: {last_w})")
+                # print(f"Weather for {cat} has not changed (still is: {last_w})")
+                ...
+
+        self._last_weather = new_weather
 
     def get_active_handler(self, category: str) -> SymbolPlay:
         if category not in self.play_library.library:
@@ -188,10 +178,14 @@ class PlayOrchestrator:
         # make sure we aren't already running a play for this symbol category
         try:
             handler = self.get_active_handler(category)
+            # TODO wrap this in a try...except
             handler.stop()
+            self._inactive_category_handlers.add(handler)
+            del self._active_category_handlers[category]
+
             return True
 
-        except:
+        except Exception as e:
             raise
 
 

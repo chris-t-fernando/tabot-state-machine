@@ -35,4 +35,5 @@ sh = StrategyHandler(globals().copy())
 store = Ssm()
 po = PlayOrchestrator(store=store, strategy_handler=sh, run_type=RT_BACKTEST)
 po.start()
-po.run()
+while True:
+    po.run()

@@ -44,3 +44,6 @@ class CategoryHandler:
     def start(self):
         for h in self.symbol_handlers:
             h.start()
+
+    def stop(self) -> None:
+        return
