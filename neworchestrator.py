@@ -1,8 +1,6 @@
 import __main__
-from broker_api import AlpacaAPI, BackTestAPI, ITradeAPI
 from parameter_store import Ssm
-from core import PlayOrchestrator
-from core import StrategyHandler
+from core import PlayOrchestrator, StrategyHandler, RT_BACKTEST
 from strategies import (
     MacdPlayConfig,
     MacdStateEnteringPosition,
@@ -35,6 +33,6 @@ logging.getLogger("strategies.macd").setLevel(level)
 sh = StrategyHandler(globals().copy())
 
 store = Ssm()
-po = PlayOrchestrator(store, sh)
+po = PlayOrchestrator(store=store, strategy_handler=sh, run_type=RT_BACKTEST)
 po.start()
 po.run()

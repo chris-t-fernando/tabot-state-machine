@@ -1,14 +1,15 @@
 from parameter_store import IParameterStore
 from broker_api import BackTestAPI
+from symbol import Symbol
 
-from .time_manager import TimeManager
+from .time_manager import BackTestTimeManager
 from .play_library import PlayLibrary
 from .symbol_data import SymbolData
-from .weather import IWeatherReader, StubWeather
+from .weather import IWeatherReader, StubWeather, WeatherResult
 from .category_handler import CategoryHandler
-from .symbol_handler import SymbolHandler
 from .symbol_play import SymbolPlay
 from .strategy_handler import StrategyHandler
+from .constants import RT_BACKTEST, RT_PAPER, RT_REAL
 
 
 class PlayOrchestrator:
@@ -38,7 +39,7 @@ class PlayOrchestrator:
     """
 
     store: IParameterStore
-    time_manager: TimeManager
+    time_manager: BackTestTimeManager
     play_library: PlayLibrary
     symbol_data: SymbolData
     weather: IWeatherReader
@@ -46,81 +47,62 @@ class PlayOrchestrator:
     _inactive_category_handlers: set
 
     def __init__(
-        self, store: IParameterStore, strategy_handler: StrategyHandler
+        self,
+        store: IParameterStore,
+        strategy_handler: StrategyHandler,
+        run_type: int = RT_BACKTEST,
     ) -> None:
         self._active_category_handlers = dict()
         self._inactive_category_handlers = set()
         self.store = store
         self.strategy_handler = strategy_handler
-        self.time_manager = TimeManager()
-        self.broker = BackTestAPI(time_manager=self.time_manager)
         self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)
         self.symbol_data = SymbolData(
             self.play_library.unique_symbols, self.play_library.algos
         )
+        tm = self._get_time_manager(run_type)
+        self.time_manager = tm(self.symbol_data.unique_symbols)
+        self.broker = BackTestAPI(time_manager=self.time_manager)
         self.weather = StubWeather(self.time_manager)
+        self._last_weather = self.weather.get_all()
+
+    def _get_time_manager(self, run_type):
+        if run_type == RT_BACKTEST:
+            return BackTestTimeManager
+        else:
+            # TODO!!!
+            return
 
     def start(self):
-        weather = self.weather.get_all()
+        self._last_weather = self.weather.get_all()
         for cat in self.play_library.symbol_categories:
-            cat_symbols_obj = dict()
-            w = weather[cat].condition
-            plays = self.play_library.library[cat][w]
-            cat_symbols_str = self.play_library.symbol_categories[cat]
+            # cat_symbols_obj = dict()
+            w = self._last_weather[cat].condition
+            # plays = self._get_plays(cat, w)
+            # cat_symbols_obj = self._get_symbol_obj(cat)
 
-            # TODO this has no business being here - it should be part of PlayLibrary
-            for s in cat_symbols_str:
-                cat_symbols_obj[s] = self.symbol_data.symbols[s]
-
-            c = CategoryHandler(
-                symbols=cat_symbols_obj,
-                play_configs=plays,
-                broker=self.broker,
-                time_manager=self.time_manager,
-            )
-            c.start()
-
-            # pc = SymbolHandler(
-            #    "vanana",
-            #    symbols=self.symbol_data.symbols,
-            #    time_manager=self.time_manager,
-            #    play_config=plays,
+            self.start_handler(cat, w)
+            # c = CategoryHandler(
+            #    symbols=cat_symbols_obj,
+            #    play_configs=plays,
             #    broker=self.broker,
+            #    time_manager=self.time_manager,
             # )
-            # pc.start()
+            # c.start()
 
-            print("banana")
+        print("banana")
 
-    def get_active_handler(self, category: str) -> SymbolPlay:
-        if category not in self.play_library.library:
-            raise RuntimeError(f"Cannot find symbol category named '{category}'")
+    def _get_plays(self, category, weather):
+        return self.play_library.library[category][weather]
 
-        if category not in self._active_category_handlers:
-            return False
+    def _get_symbol_obj(self, cat: str) -> dict[str, Symbol]:
+        cat_symbols_str = self.play_library.symbol_categories[cat]
 
-        return self._active_category_handlers[category]
-
-    def start_handler(self, category: str, condition: str) -> SymbolPlay:
-        # make sure the symbol category exists
-        if category not in self.play_library.library:
-            raise RuntimeError(f"Cannot find symbol category named '{category}'")
-
-        # make sure we aren't already running a play for this symbol category
-        if self.get_active_handler(category):
-            # already running
-            raise RuntimeError(
-                f"Already running a PlayController for symbol category '{category}'"
-            )
-
-        # make sure the market condition exists
-        if condition not in self.play_library.market_conditions:
-            raise RuntimeError(f"Cannot find market condition named '{condition}'")
-
-        self._active_category_handlers[category] = CategoryHandler(
-            symbols=self.play_library.library
-        )
-
-    # TODO property for running plays
+        cat_symbols_obj = dict()
+        # TODO this has no business being here - it should be part of PlayLibrary
+        for s in cat_symbols_str:
+            cat_symbols_obj[s] = self.symbol_data.symbols[s]
+        return cat_symbols_obj
 
     """
     Run responsibilities:
@@ -133,4 +115,100 @@ class PlayOrchestrator:
     """
 
     def run(self):
-        ...
+        new_now = self.time_manager.tick()
+        new_weather = self.weather.get_all()
+
+        for cat in self.play_library.symbol_categories:
+            last_w = self._last_weather[cat].condition
+            new_w = new_weather[cat].condition
+            if last_w != new_w:
+                # weather has changed
+                print(f"Weather for {cat} has changed (was: {last_w}, now: {new_w})")
+                self.stop_handler(category=cat)
+                self.start_handler(category=cat, condition=new_w)
+            else:
+                # weather has not changed
+                print(f"Weather for {cat} has not changed (still is: {last_w})")
+
+    def get_active_handler(self, category: str) -> SymbolPlay:
+        if category not in self.play_library.library:
+            raise InvalidCategory(
+                f"Cannot find symbol category named '{category}' - check config"
+            )
+
+        if category not in self._active_category_handlers:
+            raise NoRunningHandlerForCategory(f"No running handler for {category}")
+
+        return self._active_category_handlers[category]
+
+    def start_handler(self, category: str, condition: str) -> SymbolPlay:
+        # make sure the symbol category exists
+        if category not in self.play_library.library:
+            raise InvalidCategory(
+                f"Cannot find symbol category named '{category}' - check config"
+            )
+
+        # make sure we aren't already running a play for this symbol category
+        try:
+            self.get_active_handler(category)
+            raise HandlerForCategoryAlreadyRunning(
+                f"A handler is already running for {category}. Stop it before starting a new one"
+            )
+            # already running
+        except NoRunningHandlerForCategory:
+            # expected exception - its good if this fires, means there wasn't a handler running for this
+            ...
+        except:
+            raise
+
+        # make sure the market condition exists
+        if condition not in self.play_library.market_conditions:
+            raise InvalidMarketCondition(
+                f"Cannot find market condition named '{condition}'"
+            )
+
+        cat_symbols_obj = self._get_symbol_obj(category)
+        plays = self._get_plays(category, condition)
+
+        self._active_category_handlers[category] = CategoryHandler(
+            # symbols=self.play_library.library,
+            symbols=cat_symbols_obj,
+            play_configs=plays,
+            broker=self.broker,
+            time_manager=self.time_manager,
+        )
+
+    def stop_handler(self, category: str):
+        # make sure the symbol category exists
+        if category not in self.play_library.library:
+            raise InvalidCategory(
+                f"Cannot find symbol category named '{category}' - check config"
+            )
+
+        # make sure we aren't already running a play for this symbol category
+        try:
+            handler = self.get_active_handler(category)
+            handler.stop()
+            return True
+
+        except:
+            raise
+
+
+# TODO property for running plays
+
+
+class InvalidCategory(Exception):
+    ...
+
+
+class NoRunningHandlerForCategory(Exception):
+    ...
+
+
+class HandlerForCategoryAlreadyRunning(Exception):
+    ...
+
+
+class InvalidMarketCondition(Exception):
+    ...

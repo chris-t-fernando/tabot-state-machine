@@ -1,5 +1,5 @@
 from symbol import Symbol
-from .time_manager import TimeManager
+from .time_manager import BackTestTimeManager
 from .symbol_play import SymbolPlay
 from .play_config import PlayConfig
 from .controller_config import ControllerConfig
@@ -16,7 +16,7 @@ class SymbolHandler:
 
     _symbols: dict[Symbol]
     _ta_algos: set
-    time_manager: TimeManager
+    time_manager: BackTestTimeManager
     started: bool
     _play_controllers: set[SymbolPlay]
     active_play_controllers: set[SymbolPlay]
@@ -26,7 +26,7 @@ class SymbolHandler:
     def __init__(
         self,
         symbols: set[Symbol],
-        time_manager: TimeManager,
+        time_manager: BackTestTimeManager,
         play_config: PlayConfig,
         broker: ITradeAPI,
     ) -> None:

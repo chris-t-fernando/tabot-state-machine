@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Set
 from symbol import Symbol
-from pandas import Timestamp
+import pandas as pd
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 
@@ -10,11 +11,11 @@ class ITimeManager(ABC):
     def __init__(self, symbol_list: list = None, interval: int = 300) -> None:
         ...
 
-    @abstractmethod
+    # @abstractmethod
     def add_symbol(self, symbol: Symbol) -> bool:
         ...
 
-    @abstractmethod
+    # @abstractmethod
     def add_symbols(self, symbol_list: list) -> bool:
         ...
 
@@ -43,26 +44,30 @@ class ITimeManager(ABC):
         ...
 
 
-class TimeManager(ITimeManager):
-    def __init__(self, symbol_list: list = None, interval: int = 300) -> None:
-        self._symbols: Set[Symbol]
-        self._symbols = set()
+class BackTestTimeManager(ITimeManager):
+    _symbols: Set[Symbol]
+    _date: pd.Timestamp
+    tick_padding: int = 90
 
-        self._date: Timestamp
+    def __init__(self, symbols: set[Symbol], interval: int = 300) -> None:
+        self._symbols = set()
         self._date = None
 
         self._interval = interval
         self._delta = relativedelta(seconds=interval)
 
-        if symbol_list:
-            self.add_symbols(symbol_list)
+        self._symbols = symbols
 
+        self.now = self.first
+
+    """
     def add_symbol(self, symbol: Symbol) -> bool:
         return self._symbols.add(symbol)
 
     def add_symbols(self, symbol_list: list) -> bool:
         symbol_set = set(symbol_list)
         self._symbols = self._symbols | symbol_set
+    """
 
     @property
     def first(self):
@@ -108,7 +113,7 @@ class TimeManager(ITimeManager):
         return self._date
 
     @now.setter
-    def now(self, new_date):
+    def now(self, new_date: pd.Timestamp):
         if new_date < self.first:
             raise KeyError(
                 f"New date {new_date} is earlier than earliest date {self.first}"
@@ -122,6 +127,33 @@ class TimeManager(ITimeManager):
         # TODO raise exception or something if we try to tick in to the future
         self.now = self.now + self._delta
         return self.now
+
+    @property
+    def tick_ttl(self):
+        # now + padding is later than latest record, so return 0
+        # now + padding is less than latest record
+        #  - if we are backtesting, then return 0
+        #  - if we are not backtesting, then return now - (last record + 90)
+        #    - now 9:46
+        #    - last record (9.45 + 90) = 9:47
+        #
+        #    - now 9:49
+        #    -
+
+        # backtest will always return 0 - either we're ready to get a new row, or there will never be any more new rows to get
+
+        if self.now == self.latest:
+            raise KeyError(f"Backtesting - already at last row")
+
+        return 0
+
+        padded_last = self.last + timedelta(seconds=self.tick_padding)
+        if self.now < padded_last:
+            return 0
+
+        now = datetime.utcnow()
+
+        return self.now - self._delta
 
 
 # a = Symbol("BTC-USD")

@@ -7,6 +7,7 @@ log = logging.getLogger(__name__)
 
 class SymbolData:
     symbols: Dict[str, Symbol]
+    unique_symbols: set[Symbol]
     _ta_algos: set
 
     def __init__(self, symbols: set[str], algos: set):
@@ -40,3 +41,11 @@ class SymbolData:
             for s_str in self.symbols:
                 self.symbols[s_str].ohlc.apply_ta(a)
                 # s_obj.ohlc.apply_ta(a)
+
+    @property
+    def unique_symbols(self):
+        symbol_set = set()
+        for k, s in self.symbols.items():
+            symbol_set.add(s)
+
+        return symbol_set

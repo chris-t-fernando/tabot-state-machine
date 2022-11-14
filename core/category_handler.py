@@ -2,7 +2,7 @@ from symbol import Symbol
 from broker_api import ITradeAPI
 from .play_config import PlayConfig
 from .symbol_handler import SymbolHandler
-from .time_manager import TimeManager
+from .time_manager import BackTestTimeManager
 
 
 class CategoryHandler:
@@ -16,14 +16,14 @@ class CategoryHandler:
     play_configs: list[PlayConfig]
     symbol_handlers: list[SymbolHandler]
     broker: ITradeAPI
-    time_manager: TimeManager
+    time_manager: BackTestTimeManager
 
     def __init__(
         self,
         symbols: set[Symbol],
         play_configs: list[PlayConfig],
         broker: ITradeAPI,
-        time_manager: TimeManager,
+        time_manager: BackTestTimeManager,
     ):
         self.symbols = symbols
         self.play_configs = play_configs

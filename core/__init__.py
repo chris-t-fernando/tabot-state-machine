@@ -1,4 +1,4 @@
-from .time_manager import TimeManager, ITimeManager
+from .time_manager import BackTestTimeManager, ITimeManager
 from .state_waiting import StateWaiting
 from .state_entering_position import StateEnteringPosition
 from .state import State
@@ -17,5 +17,6 @@ from .play_orchestrator import PlayOrchestrator
 from .play_config import PlayConfig
 from .weather import IWeatherReader, StubWeather
 from .ita import ITA
+from .constants import RT_BACKTEST, RT_PAPER, RT_REAL
 
 from .exceptions import *
