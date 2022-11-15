@@ -19,6 +19,8 @@ log = logging.getLogger(__name__)
 
 
 class Instance(ABC):
+    _state: State
+
     def __init__(
         self, template: PlayConfig, play_controller, state=None, state_args=None
     ) -> None:
@@ -162,6 +164,8 @@ class Instance(ABC):
 
     @property
     def units_bought(self):
+        if self._buy_order == None:
+            return 0
         filled = self._buy_order.filled_unit_quantity
         # if none are filled, this will be None
         if not filled:

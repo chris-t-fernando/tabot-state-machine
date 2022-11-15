@@ -11,7 +11,7 @@ class PlayLibrary:
     symbol_categories: dict[str, set[str]]
     market_conditions: set[str]
     unique_symbols: set[str]
-    library: set[set[PlayConfig]]
+    library: dict[str, dict[str, PlayConfig]]
     strategy_handler: StrategyHandler
 
     def __init__(
@@ -71,7 +71,7 @@ class PlayLibrary:
             return PlayConfig
 
     # TODO instantiate symbols, lifecycle them somehow
-    def _setup_library(self):
+    def _setup_library(self) -> dict:
         # /root/symbol_categories - the different symbol groups eg crypto_stable
         # /root/market_conditions - the different market conditions eg choppy
         # /root/crypto_stable/bear - example path where play configs get read out

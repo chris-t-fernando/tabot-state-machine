@@ -23,12 +23,14 @@ root_logger = logging.getLogger()
 root_logger.setLevel(logging.CRITICAL)
 root_logger.addHandler(stream_handler)
 
-level = 9
+level = 10
 log = logging.getLogger(__name__)
 log.setLevel(level)
-logging.getLogger("core.instance_state").setLevel(level)
-logging.getLogger("core.orchestrator").setLevel(level)
-logging.getLogger("strategies.macd").setLevel(level)
+# logging.getLogger("core.instance_state").setLevel(level)
+# logging.getLogger("core.orchestrator").setLevel(level)
+# logging.getLogger("strategies.macd").setLevel(level)
+logging.getLogger("strategies").setLevel(level)
+logging.getLogger("core").setLevel(level)
 
 sh = StrategyHandler(globals().copy())
 

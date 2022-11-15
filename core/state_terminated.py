@@ -1,12 +1,8 @@
-from abc import abstractmethod
-
 from .state import State
 from .exceptions import UnhandledBrokerException
 
 
 class StateTerminated(State):
-    @abstractmethod
-    # def __init__(self, parent_instance, previous_state: State) -> None:
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
@@ -63,17 +59,17 @@ class StateTerminated(State):
 
             self.log.info(f"Liquidated instance", order=liquidate_order.as_dict())
 
-        _sold = self.parent_instance.total_sell_value
-        _bought = self.parent_instance.total_buy_value
-        _gained = _sold - _bought
-        _units = self.parent_instance.units_bought
-        _avg_buy_price = _bought / _units
-        _avg_sell_price = _sold / _units
+        _sell_value = self.parent_instance.total_sell_value
+        _buy_value = self.parent_instance.total_buy_value
+        _gained = _sell_value - _buy_value
+        _buy_units = self.parent_instance.units_bought
+        _avg_buy_price = 0 if _buy_value == 0 else _buy_value / _buy_units
+        _avg_sell_price = 0 if _sell_value == 0 else _sell_value / _buy_units
 
         log_extras = {
-            "units": _units,
-            "bought_value": _bought,
-            "sold_value": _sold,
+            "units": _buy_units,
+            "bought_value": _buy_value,
+            "sold_value": _sell_value,
             "total_gain": _gained,
             "average_buy_price": _avg_buy_price,
             "average_sell_price": _avg_sell_price,

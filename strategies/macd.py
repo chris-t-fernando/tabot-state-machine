@@ -88,7 +88,7 @@ class MacdStateWaiting(StateWaiting):
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
     def check_exit(self):
-        self.log.debug(f"{self.symbol_str}: Running check_exit()")
+        self.log.log(9, f"{self.symbol_str}: Running check_exit()")
         config_period = self.config.sma_comparison_period
 
         df = self.ohlc.get_range()

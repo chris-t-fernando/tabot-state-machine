@@ -40,14 +40,12 @@ class SymbolPlay(ABC):
         self.instances = []
         self.terminated_instances = []
 
-    def start_play(self):
+    def start(self):
         if len(self.instances) > 0:
             raise RuntimeError("Already started plays, can't call start_play() twice")
 
         # for template in self.play_config.play_templates:
         self.instances.append(self.play_instance_class(self.play_config, self))
-
-        self.run()
 
     def register_instance(self, new_instance):
         self.instances.append(new_instance)

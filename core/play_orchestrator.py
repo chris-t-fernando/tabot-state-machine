@@ -102,7 +102,7 @@ class PlayOrchestrator:
     """
 
     def run(self):
-        new_now = self.time_manager.tick()
+        self.time_manager.tick()
         new_weather = self.weather.get_all()
 
         for cat in self.play_library.symbol_categories:
@@ -112,15 +112,18 @@ class PlayOrchestrator:
                 # weather has changed
                 print(f"Weather for {cat} has changed (was: {last_w}, now: {new_w})")
                 self.stop_handler(category=cat)
-                self.start_handler(category=cat, condition=new_w)
+                this_handler = self.start_handler(category=cat, condition=new_w)
+
             else:
                 # weather has not changed
                 # print(f"Weather for {cat} has not changed (still is: {last_w})")
-                ...
+                this_handler = self.get_active_handler(category=cat)
+
+            this_handler.run()
 
         self._last_weather = new_weather
 
-    def get_active_handler(self, category: str) -> SymbolPlay:
+    def get_active_handler(self, category: str) -> CategoryHandler:
         if category not in self.play_library.library:
             raise InvalidCategory(
                 f"Cannot find symbol category named '{category}' - check config"
@@ -131,7 +134,7 @@ class PlayOrchestrator:
 
         return self._active_category_handlers[category]
 
-    def start_handler(self, category: str, condition: str) -> SymbolPlay:
+    def start_handler(self, category: str, condition: str) -> CategoryHandler:
         # make sure the symbol category exists
         if category not in self.play_library.library:
             raise InvalidCategory(
@@ -160,15 +163,18 @@ class PlayOrchestrator:
         cat_symbols_obj = self._get_symbol_obj(category)
         plays = self._get_plays(category, condition)
 
-        self._active_category_handlers[category] = CategoryHandler(
+        new_handler = CategoryHandler(
             # symbols=self.play_library.library,
             symbols=cat_symbols_obj,
             play_configs=plays,
             broker=self.broker,
             time_manager=self.time_manager,
         )
+        new_handler.start()
+        self._active_category_handlers[category] = new_handler
+        return new_handler
 
-    def stop_handler(self, category: str):
+    def stop_handler(self, category: str) -> bool:
         # make sure the symbol category exists
         if category not in self.play_library.library:
             raise InvalidCategory(

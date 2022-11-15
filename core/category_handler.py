@@ -46,4 +46,9 @@ class CategoryHandler:
             h.start()
 
     def stop(self) -> None:
-        return
+        for h in self.symbol_handlers:
+            h.stop()
+
+    def run(self) -> None:
+        for h in self.symbol_handlers:
+            h.run()

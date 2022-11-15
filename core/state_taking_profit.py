@@ -1,9 +1,7 @@
 from .state import State
-from abc import abstractmethod
 
 
 class StateTakingProfit(State):
-    @abstractmethod
     def __init__(self, previous_state: State, parent_instance=None, **kwargs) -> None:
         super().__init__(parent_instance=parent_instance, previous_state=previous_state)
 
