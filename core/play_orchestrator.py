@@ -2,7 +2,7 @@ from parameter_store import IParameterStore
 from broker_api import BackTestAPI
 from symbol import Symbol
 
-from .time_manager import BackTestTimeManager
+from .time_manager import BackTestTimeManager, ITimeManager
 from .play_library import PlayLibrary
 from .symbol_data import SymbolData
 from .weather import IWeatherReader, StubWeather, WeatherResult
@@ -39,7 +39,7 @@ class PlayOrchestrator:
     """
 
     store: IParameterStore
-    time_manager: BackTestTimeManager
+    time_manager: ITimeManager
     play_library: PlayLibrary
     symbol_data: SymbolData
     weather: IWeatherReader
@@ -57,16 +57,27 @@ class PlayOrchestrator:
         self.store = store
         self.strategy_handler = strategy_handler
         self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)
-        self.symbol_data = SymbolData(
-            self.play_library.unique_symbols, self.play_library.algos
-        )
+
+        # back_testing = True if run_type == RT_BACKTEST else False
+
         tm = self._get_time_manager(run_type)
-        self.time_manager = tm(self.symbol_data.unique_symbols)
-        self.broker = BackTestAPI(time_manager=self.time_manager)
+        self.time_manager: ITimeManager = tm()
+
+        self.symbol_data = SymbolData(
+            self.play_library.unique_symbols, self.play_library.algos, self.time_manager
+        )
+
+        self.time_manager.add_symbols(self.symbol_data.unique_symbols)
+
+        self.broker = BackTestAPI(
+            time_manager=self.time_manager,
+            symbol_objects=self.symbol_data.unique_symbols,
+        )
+
         self.weather = StubWeather(self.time_manager)
         self._last_weather = self.weather.get_all()
 
-    def _get_time_manager(self, run_type):
+    def _get_time_manager(self, run_type) -> ITimeManager:
         if run_type == RT_BACKTEST:
             return BackTestTimeManager
         else:
@@ -74,6 +85,7 @@ class PlayOrchestrator:
             return
 
     def start(self):
+        self.time_manager.start()
         self._last_weather = self.weather.get_all()
         for cat in self.play_library.symbol_categories:
             w = self._last_weather[cat].condition

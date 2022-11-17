@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from symbol import Symbol
-from .symbol_data import SymbolData
+from symbol import Symbol, SymbolData
+
+# from .symbol_data import SymbolData
 from .play_config import PlayConfig
 from broker_api import ITradeAPI
 import logging
@@ -38,7 +39,7 @@ class State(ABC):
         self.controller = self.parent_instance.parent_controller
         self.log = self.parent_instance.log
 
-        self.log.debug(f"Started {self.__repr__()}")
+        # self.log.debug(f"Started {self.__repr__()} at {self.symbol.time_manager.now()}")
 
     @abstractmethod
     def check_exit(self):

@@ -8,6 +8,7 @@ from .state import State
 from .state_terminated import StateTerminated
 from .state_stopping_loss import StateStoppingLoss
 from .state_taking_profit import StateTakingProfit
+from .time_manager import ITimeManager
 from broker_api import IOrderResult
 from .exceptions import BuyOrderAlreadySet, SellOrderAlreadySet
 
@@ -26,6 +27,7 @@ class Instance(ABC):
     ) -> None:
         self.config = template
         self.parent_controller = play_controller
+        self.time_manager = play_controller.time_manager
         self.broker = play_controller.broker
         self.symbol = play_controller.symbol
         self.ohlc = play_controller.symbol.ohlc

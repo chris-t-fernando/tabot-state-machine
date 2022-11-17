@@ -13,10 +13,10 @@
             "justMyCode": false
         },
         {
-            "name": "example.py",
+            "name": "neworch",
             "type": "python",
             "request": "launch",
-            "program": "example.py",
+            "program": "neworchestrator.py",
             "console": "integratedTerminal",
             "justMyCode": false
         }

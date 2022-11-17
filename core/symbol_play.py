@@ -9,7 +9,7 @@ from .controller_config import ControllerConfig
 from .state_terminated import StateTerminated
 from .state import State
 from .instance_list import InstanceList
-
+from .time_manager import ITimeManager
 import logging
 
 log = logging.getLogger(__name__)
@@ -23,15 +23,18 @@ class SymbolPlay(ABC):
     play_instance_class: Instance
     play_id: str
     terminated_instances: List[Instance]
+    time_manager: ITimeManager
 
     def __init__(
         self,
         symbol: Symbol,
         play_config: ControllerConfig,
         broker: ITradeAPI,
+        time_manager: ITimeManager,
         play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
+        self.time_manager = time_manager
         self.play_config = play_config
         self.play_id = self._generate_play_id()
         self.broker = broker
@@ -66,7 +69,6 @@ class SymbolPlay(ABC):
 
         return gain
 
-    # @property
     def stop(self, hard_stop: bool = False):
         for i in self.instances:
             i.stop(hard_stop=hard_stop)

@@ -76,5 +76,7 @@ class StateTerminated(State):
         }
 
         self.log.info(f"Instance summary", state_parameters=log_extras)
-        self.log.info(f"Instance termination complete")
+        self.log.info(
+            f"Instance termination complete at {self.parent_instance.time_manager.now}"
+        )
         self.parent_instance.handler.close()

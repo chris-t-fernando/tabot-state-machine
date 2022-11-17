@@ -1,18 +1,22 @@
 from symbol import Symbol
-from typing import Dict
+from core.time_manager import ITimeManager
 import logging
 
 log = logging.getLogger(__name__)
 
 
 class SymbolData:
-    symbols: Dict[str, Symbol]
+    symbols: dict[str, Symbol]
     unique_symbols: set[Symbol]
     _ta_algos: set
+    time_manager: ITimeManager
 
-    def __init__(self, symbols: set[str], algos: set):
+    def __init__(self, symbols: set[str], algos: set, time_manager: ITimeManager):
         self.symbols = dict()
         self._ta_algos = set()
+        self.time_manager = time_manager
+
+        # self._back_testing = back_testing
 
         for s in symbols:
             s_obj = self._instantiate_symbol(s)
@@ -28,7 +32,7 @@ class SymbolData:
             )
             return
 
-        s = Symbol(yf_symbol=symbol)
+        s = Symbol(yf_symbol=symbol, time_manager=self.time_manager)
 
         return s
 

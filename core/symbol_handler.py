@@ -60,7 +60,9 @@ class SymbolHandler:
             )
 
         for s, s_obj in self._symbols.items():
-            _new_controller = SymbolPlay(s_obj, self.play_config, self.broker)
+            _new_controller = SymbolPlay(
+                s_obj, self.play_config, self.broker, self.time_manager
+            )
             self._symbol_plays.add(_new_controller)
             _new_controller.start()
 
@@ -76,7 +78,7 @@ class SymbolHandler:
 
     def run(self):
         # need a way to mark retiring play controllers so that they don't get started up again
-        log.info(f"Running for period {self.period}")
+        # log.info(f"Running for period {self.period}")
         for c in self.active_symbol_plays:
             c.run()
 

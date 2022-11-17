@@ -63,7 +63,7 @@ class StateEnteringPosition(State):
         if not units:
             _bars = self.ohlc.get_latest()
             last_price = _bars.Close
-            budget = self.config.buy_budget
+            budget = self.config.max_play_size
             units = budget / last_price
             self.log.debug(
                 f"No units set, using default calculation. Unaligned units: {units}"
@@ -108,6 +108,7 @@ class StateEnteringPosition(State):
                 self.log.exception(
                     f"Failed to submit Buy Limit order for {aligned_units} units at {aligned_limit_price}. Error: {str(e)}",
                 )
+                raise
 
         else:
             try:
@@ -120,6 +121,7 @@ class StateEnteringPosition(State):
                 self.log.exception(
                     f"Failed to submit Buy Market order for {aligned_units}. Error: {str(e)}",
                 )
+                raise
 
         # hold on to the order result object for further inspection in check_exit and do_exit
         self.intervals_until_timeout = self.config.buy_timeout_intervals

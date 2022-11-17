@@ -6,17 +6,27 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
 
+class TimeManagerNotStartedError(Exception):
+    ...
+
+
 class ITimeManager(ABC):
+    back_test: bool = False
+
     @abstractmethod
-    def __init__(self, symbol_list: list = None, interval: int = 300) -> None:
+    def __init__(self, interval: int = 300) -> None:
         ...
 
     # @abstractmethod
     def add_symbol(self, symbol: Symbol) -> bool:
         ...
 
-    # @abstractmethod
-    def add_symbols(self, symbol_list: list) -> bool:
+    @abstractmethod
+    def add_symbols(self, symbols: set) -> bool:
+        ...
+
+    @abstractmethod
+    def start(self):
         ...
 
     @property
@@ -48,29 +58,34 @@ class BackTestTimeManager(ITimeManager):
     _symbols: Set[Symbol]
     _date: pd.Timestamp
     tick_padding: int = 90
+    now: pd.Timestamp
+    first: pd.Timestamp
+    last: pd.Timestamp
+    back_test: bool = True
 
-    def __init__(self, symbols: set[Symbol], interval: int = 300) -> None:
+    def __init__(self, interval: int = 300) -> None:
         self._symbols = set()
         self._date = None
 
         self._interval = interval
         self._delta = relativedelta(seconds=interval)
 
-        self._symbols = symbols
+        self._symbols = set()
 
+    def start(self):
         self.now = self.first
 
     """
     def add_symbol(self, symbol: Symbol) -> bool:
         return self._symbols.add(symbol)
-
-    def add_symbols(self, symbol_list: list) -> bool:
-        symbol_set = set(symbol_list)
-        self._symbols = self._symbols | symbol_set
     """
 
+    def add_symbols(self, symbols: set) -> bool:
+        symbol_set = set(symbols)
+        self._symbols = self._symbols | symbol_set
+
     @property
-    def first(self):
+    def first(self) -> pd.Timestamp:
         if len(self._symbols) == 0:
             raise RuntimeError("No symbols added yet")
 
@@ -89,7 +104,7 @@ class BackTestTimeManager(ITimeManager):
         return padded_earliest
 
     @property
-    def last(self):
+    def last(self) -> pd.Timestamp:
         if len(self._symbols) == 0:
             raise RuntimeError("No symbols added yet")
 
@@ -105,15 +120,18 @@ class BackTestTimeManager(ITimeManager):
         return latest
 
     @property
-    def now(self):
+    def now(self) -> pd.Timestamp:
         if not self._date:
             # hackity hack
-            self._date = next(iter(self._symbols)).ohlc.bars.iloc[-1].name
+            # self._date = next(iter(self._symbols)).ohlc.bars.iloc[-1].name
+            raise TimeManagerNotStartedError(
+                f"Current date not set. Have you called start() yet?"
+            )
 
         return self._date
 
     @now.setter
-    def now(self, new_date: pd.Timestamp):
+    def now(self, new_date: pd.Timestamp) -> None:
         if new_date < self.first:
             raise KeyError(
                 f"New date {new_date} is earlier than earliest date {self.first}"
@@ -123,13 +141,13 @@ class BackTestTimeManager(ITimeManager):
 
         self._date = new_date
 
-    def tick(self):
+    def tick(self) -> pd.Timestamp:
         # TODO raise exception or something if we try to tick in to the future
         self.now = self.now + self._delta
         return self.now
 
     @property
-    def tick_ttl(self):
+    def tick_ttl(self) -> int:
         # now + padding is later than latest record, so return 0
         # now + padding is less than latest record
         #  - if we are backtesting, then return 0
