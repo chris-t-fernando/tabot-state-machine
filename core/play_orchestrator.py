@@ -1,6 +1,8 @@
 from parameter_store import IParameterStore
 from broker_api import BackTestAPI
 from symbol import Symbol
+import pandas as pd
+import uuid
 
 from .time_manager import BackTestTimeManager, ITimeManager
 from .play_library import PlayLibrary
@@ -10,6 +12,10 @@ from .category_handler import CategoryHandler
 from .symbol_play import SymbolPlay
 from .strategy_handler import StrategyHandler
 from .constants import RT_BACKTEST, RT_PAPER, RT_REAL
+
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class PlayOrchestrator:
@@ -45,6 +51,8 @@ class PlayOrchestrator:
     weather: IWeatherReader
     _active_category_handlers: dict[str, CategoryHandler]
     _inactive_category_handlers: set
+    run_type: int
+    id: str
 
     def __init__(
         self,
@@ -54,8 +62,10 @@ class PlayOrchestrator:
     ) -> None:
         self._active_category_handlers = dict()
         self._inactive_category_handlers = set()
+        self.id = self._generate_id()
         self.store = store
         self.strategy_handler = strategy_handler
+        self.run_type = run_type
         self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)
 
         # back_testing = True if run_type == RT_BACKTEST else False
@@ -76,6 +86,9 @@ class PlayOrchestrator:
 
         self.weather = StubWeather(self.time_manager)
         self._last_weather = self.weather.get_all()
+
+    def _generate_id(self, length: int = 6):
+        return uuid.uuid4().hex[:length].upper()
 
     def _get_time_manager(self, run_type) -> ITimeManager:
         if run_type == RT_BACKTEST:
@@ -122,13 +135,12 @@ class PlayOrchestrator:
             new_w = new_weather[cat].condition
             if last_w != new_w:
                 # weather has changed
-                print(f"Weather for {cat} has changed (was: {last_w}, now: {new_w})")
+                log.info(f"Weather for {cat} has changed (was: {last_w}, now: {new_w})")
                 self.stop_handler(category=cat)
                 this_handler = self.start_handler(category=cat, condition=new_w)
 
             else:
                 # weather has not changed
-                # print(f"Weather for {cat} has not changed (still is: {last_w})")
                 this_handler = self.get_active_handler(category=cat)
 
             this_handler.run()
@@ -176,11 +188,11 @@ class PlayOrchestrator:
         plays = self._get_plays(category, condition)
 
         new_handler = CategoryHandler(
-            # symbols=self.play_library.library,
             symbols=cat_symbols_obj,
             play_configs=plays,
             broker=self.broker,
             time_manager=self.time_manager,
+            run_id=self.__str__(),
         )
         new_handler.start()
         self._active_category_handlers[category] = new_handler
@@ -206,8 +218,38 @@ class PlayOrchestrator:
         except Exception as e:
             raise
 
+    # TODO property for running plays
+    @property
+    def first_record(self) -> pd.Timestamp:
+        return self.time_manager.first
 
-# TODO property for running plays
+    @property
+    def last_record(self) -> pd.Timestamp:
+        return self.time_manager.last
+
+    @property
+    def now(self) -> pd.Timestamp:
+        return self.time_manager.now
+
+    @property
+    def tick_ttl(self) -> int:
+        return self.time_manager.tick_ttl
+
+    @property
+    def eof(self) -> bool:
+        if self.now == self.last_record:
+            return True
+        return False
+
+    def sleep(self) -> None:
+        if self.run_type == RT_BACKTEST:
+            return
+        else:
+            # TODO
+            ...
+
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}-{self.id}"
 
 
 class InvalidCategory(Exception):

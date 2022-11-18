@@ -24,6 +24,7 @@ class SymbolPlay(ABC):
     play_id: str
     terminated_instances: List[Instance]
     time_manager: ITimeManager
+    run_id: str
 
     def __init__(
         self,
@@ -31,11 +32,13 @@ class SymbolPlay(ABC):
         play_config: ControllerConfig,
         broker: ITradeAPI,
         time_manager: ITimeManager,
+        run_id: str,
         play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
         self.time_manager = time_manager
         self.play_config = play_config
+        self.run_id = run_id
         self.play_id = self._generate_play_id()
         self.broker = broker
         # PlayInstance class to be use - can be overridden to enable extension

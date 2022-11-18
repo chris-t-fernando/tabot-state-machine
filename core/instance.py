@@ -51,7 +51,7 @@ class Instance(ABC):
             log_group_name=log_group,
             log_stream_name=self.id,
             buffer_duration=10000,
-            batch_count=100,
+            batch_count=1000,
         )
         self.handler.setFormatter(formatter)
         instance_log.setLevel(logging.DEBUG)

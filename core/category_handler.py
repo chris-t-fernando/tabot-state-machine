@@ -4,6 +4,10 @@ from .play_config import PlayConfig
 from .symbol_handler import SymbolHandler
 from .time_manager import BackTestTimeManager
 
+import logging
+
+log = logging.getLogger(__name__)
+
 
 class CategoryHandler:
     """
@@ -17,6 +21,7 @@ class CategoryHandler:
     symbol_handlers: list[SymbolHandler]
     broker: ITradeAPI
     time_manager: BackTestTimeManager
+    play_id: str
 
     def __init__(
         self,
@@ -24,12 +29,14 @@ class CategoryHandler:
         play_configs: list[PlayConfig],
         broker: ITradeAPI,
         time_manager: BackTestTimeManager,
+        run_id: str,
     ):
         self.symbols = symbols
         self.play_configs = play_configs
         self.symbol_handlers = []
         self.broker = broker
         self.time_manager = time_manager
+        self.run_id = run_id
 
         for config in play_configs:
             self.symbol_handlers.append(
@@ -38,6 +45,7 @@ class CategoryHandler:
                     play_config=config,
                     broker=broker,
                     time_manager=time_manager,
+                    run_id=run_id,
                 )
             )
 

@@ -22,6 +22,7 @@ class SymbolHandler:
     active_symbol_plays: set[SymbolPlay]
     play_config: PlayConfig
     broker: ITradeAPI
+    run_id: str
 
     def __init__(
         self,
@@ -29,6 +30,7 @@ class SymbolHandler:
         time_manager: BackTestTimeManager,
         play_config: PlayConfig,
         broker: ITradeAPI,
+        run_id: str,
     ) -> None:
         self._symbols = symbols
         self._ta_algos = set()
@@ -37,6 +39,7 @@ class SymbolHandler:
         self.time_manager = time_manager
         self.play_config = play_config
         self.broker = broker
+        self.run_id = run_id
 
     def __repr__(self) -> str:
         return f"SymbolGroup {self.play_config.name} ({len(self._symbols)} symbols)"
@@ -61,7 +64,11 @@ class SymbolHandler:
 
         for s, s_obj in self._symbols.items():
             _new_controller = SymbolPlay(
-                s_obj, self.play_config, self.broker, self.time_manager
+                symbol=s_obj,
+                play_config=self.play_config,
+                broker=self.broker,
+                time_manager=self.time_manager,
+                run_id=self.run_id,
             )
             self._symbol_plays.add(_new_controller)
             _new_controller.start()

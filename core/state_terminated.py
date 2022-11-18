@@ -67,6 +67,11 @@ class StateTerminated(State):
         _avg_sell_price = 0 if _sell_value == 0 else _sell_value / _buy_units
 
         log_extras = {
+            "run_id": self.parent_instance.parent_controller.run_id,
+            "weather_condition": self.parent_instance.parent_controller.play_config.market_condition,
+            "symbol": self.symbol,
+            "symbol_group": self.parent_instance.parent_controller.play_config.symbol_category,
+            "play_config_name": self.parent_instance.parent_controller.play_config.name,
             "units": _buy_units,
             "bought_value": _buy_value,
             "sold_value": _sell_value,

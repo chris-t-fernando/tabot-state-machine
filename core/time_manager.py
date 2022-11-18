@@ -61,6 +61,7 @@ class BackTestTimeManager(ITimeManager):
     now: pd.Timestamp
     first: pd.Timestamp
     last: pd.Timestamp
+    tick_ttl: int
     back_test: bool = True
 
     def __init__(self, interval: int = 300) -> None:

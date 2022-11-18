@@ -1,4 +1,4 @@
-import __main__
+# import __main__
 from parameter_store import Ssm
 from core import PlayOrchestrator, StrategyHandler, RT_BACKTEST
 from strategies import (
@@ -35,7 +35,11 @@ logging.getLogger("core").setLevel(level)
 sh = StrategyHandler(globals().copy())
 
 store = Ssm()
+# TODO call start automatically?
 po = PlayOrchestrator(store=store, strategy_handler=sh, run_type=RT_BACKTEST)
 po.start()
-while True:
+
+while not po.eof:
     po.run()
+    po.sleep()
+print("got to end")
