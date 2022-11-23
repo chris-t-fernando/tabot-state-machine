@@ -10,6 +10,8 @@ from .state_terminated import StateTerminated
 from .state import State
 from .instance_list import InstanceList
 from .time_manager import ITimeManager
+from .telemetry import ITelemetry
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ class SymbolPlay(ABC):
     terminated_instances: List[Instance]
     time_manager: ITimeManager
     run_id: str
+    telemetry: ITelemetry
 
     def __init__(
         self,
@@ -33,6 +36,7 @@ class SymbolPlay(ABC):
         broker: ITradeAPI,
         time_manager: ITimeManager,
         run_id: str,
+        telemetry: ITelemetry,
         play_instance_class: Instance = Instance,
     ) -> None:
         self.symbol = symbol
@@ -45,6 +49,7 @@ class SymbolPlay(ABC):
         self.play_instance_class = play_instance_class
         self.instances = []
         self.terminated_instances = []
+        self.telemetry = telemetry
 
     def start(self):
         if len(self.instances) > 0:

@@ -1,5 +1,5 @@
 from parameter_store import IParameterStore
-from .play_config import PlayConfig
+from .play_config import PlayConfig, JSONEncoder as PCJsonEncoder
 from core import StrategyHandler
 import json
 
@@ -118,3 +118,29 @@ class PlayLibrary:
                 library[cat][condition] = play_configs
 
         return library
+
+    def json_encode(self):
+        return JSONEncoder().encode(self.library)
+
+    # this is horrific
+    def library_as_dict(self):
+        return_dict = dict()
+        for v in self.library.values():
+            for lv in v.values():
+                for pcv in lv:
+                    for pcv_key in dir(pcv):
+                        try:
+                            getattr(getattr(pcv, pcv_key), "_cls_str")
+                            is_state = True
+                        except:
+                            is_state = False
+
+        return self.library.as_dict()
+
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, PlayConfig):
+            return PCJsonEncoder().encode(obj)
+
+        return json.JSONEncoder.default(self, obj)

@@ -3,6 +3,7 @@ from broker_api import ITradeAPI
 from .play_config import PlayConfig
 from .symbol_handler import SymbolHandler
 from .time_manager import BackTestTimeManager
+from .telemetry import ITelemetry
 
 import logging
 
@@ -22,6 +23,7 @@ class CategoryHandler:
     broker: ITradeAPI
     time_manager: BackTestTimeManager
     play_id: str
+    telemetry: ITelemetry
 
     def __init__(
         self,
@@ -30,6 +32,7 @@ class CategoryHandler:
         broker: ITradeAPI,
         time_manager: BackTestTimeManager,
         run_id: str,
+        telemetry: ITelemetry,
     ):
         self.symbols = symbols
         self.play_configs = play_configs
@@ -37,6 +40,7 @@ class CategoryHandler:
         self.broker = broker
         self.time_manager = time_manager
         self.run_id = run_id
+        self.telemetry = telemetry
 
         for config in play_configs:
             self.symbol_handlers.append(
@@ -46,6 +50,7 @@ class CategoryHandler:
                     broker=broker,
                     time_manager=time_manager,
                     run_id=run_id,
+                    telemetry=telemetry,
                 )
             )
 

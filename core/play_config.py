@@ -1,5 +1,6 @@
 from typing import Any
 from core.strategy_handler import StrategyHandler
+import json
 
 
 class PlayConfig:
@@ -79,3 +80,52 @@ class PlayConfig:
         raise RuntimeError(
             f"Could not find {state_str} in globals() - did you import it?"
         )
+
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "_cls_str"):
+            return obj._cls_str
+
+        if hasattr(obj, "strategy_handler"):
+            return_dict = obj.__dict__
+            orig_dict = return_dict["strategy_handler"]
+            del return_dict["strategy_handler"]
+            return_dict["strategy_handler"] = []
+            for strat_item in orig_dict:
+                return_dict["strategy_handler"].append(str(strat_item))
+            del return_dict["state_waiting"]
+            del return_dict["state_entering_position"]
+            del return_dict["state_taking_profit"]
+            del return_dict["state_stopping_loss"]
+            del return_dict["state_terminated"]
+            del return_dict["config_object"]
+
+            return return_dict
+
+        if obj.__module__ == "strategies.macd":
+            return f"{obj.__module__}.{obj.__name__}"
+
+        if obj.__module__ == "strategies.macd_play_config":
+            return f"{obj.__module__}.{obj.__name__}"
+
+        raise RuntimeError("This should not happen")
+
+        try:
+
+            getattr(obj, "__dict__")
+        except AttributeError:
+            return json.JSONEncoder.default(self, obj)
+        else:
+            return_dict = obj.__dict__
+            try:
+                orig_dict = return_dict["strategy_handler"]
+            except KeyError:
+                return return_dict
+            else:
+                # hickety hackity
+                del return_dict["strategy_handler"]
+                return_dict["strategy_handler"] = []
+                for strat_item in orig_dict:
+                    return_dict["strategy_handler"].append(str(strat_item))
+                return return_dict

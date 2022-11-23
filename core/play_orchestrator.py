@@ -3,6 +3,7 @@ from broker_api import BackTestAPI
 from symbol import Symbol
 import pandas as pd
 import uuid
+from datetime import datetime
 
 from .time_manager import BackTestTimeManager, ITimeManager
 from .play_library import PlayLibrary
@@ -11,7 +12,8 @@ from .weather import IWeatherReader, StubWeather, WeatherResult
 from .category_handler import CategoryHandler
 from .symbol_play import SymbolPlay
 from .strategy_handler import StrategyHandler
-from .constants import RT_BACKTEST, RT_PAPER, RT_REAL
+from .constants import RT_BACKTEST, RT_PAPER, RT_REAL, RT_DICT
+from .telemetry import ITelemetry, Sqs
 
 import logging
 
@@ -60,32 +62,53 @@ class PlayOrchestrator:
         strategy_handler: StrategyHandler,
         run_type: int = RT_BACKTEST,
     ) -> None:
+        # init stuff
         self._active_category_handlers = dict()
         self._inactive_category_handlers = set()
         self.id = self._generate_id()
         self.store = store
         self.strategy_handler = strategy_handler
         self.run_type = run_type
+        self.telemetry = Sqs(store)
+
+        # set up play library from store
         self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)
 
-        # back_testing = True if run_type == RT_BACKTEST else False
-
+        # set up time manager
         tm = self._get_time_manager(run_type)
         self.time_manager: ITimeManager = tm()
 
+        # set up symbol data
         self.symbol_data = SymbolData(
             self.play_library.unique_symbols, self.play_library.algos, self.time_manager
         )
 
+        # register symbols into time manager, so it knows the horizon
         self.time_manager.add_symbols(self.symbol_data.unique_symbols)
 
+        # set up API
         self.broker = BackTestAPI(
             time_manager=self.time_manager,
             symbol_objects=self.symbol_data.unique_symbols,
         )
 
+        # set up weather
         self.weather = StubWeather(self.time_manager)
         self._last_weather = self.weather.get_all()
+
+        self.telemetry.emit(
+            event="Play start",
+            play_id=str(self),
+            run_type=RT_DICT[run_type],
+            start_time_utc=str(datetime.utcnow()),
+            start_time_local=str(datetime.astimezone(datetime.now())),
+            play_library_symbol_categories={
+                key: list(val)
+                for (key, val) in self.play_library.symbol_categories.items()
+            },
+            play_library_conditions=list(self.play_library.market_conditions),
+            # play_library=self.play_library.json_encode(),
+        )
 
     def _generate_id(self, length: int = 6):
         return uuid.uuid4().hex[:length].upper()
@@ -193,6 +216,7 @@ class PlayOrchestrator:
             broker=self.broker,
             time_manager=self.time_manager,
             run_id=self.__str__(),
+            telemetry=self.telemetry,
         )
         new_handler.start()
         self._active_category_handlers[category] = new_handler

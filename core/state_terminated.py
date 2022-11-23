@@ -59,12 +59,16 @@ class StateTerminated(State):
 
             self.log.info(f"Liquidated instance", order=liquidate_order.as_dict())
 
+        # TODO all this telemetry should be done in instance
         _sell_value = self.parent_instance.total_sell_value
         _buy_value = self.parent_instance.total_buy_value
         _gained = _sell_value - _buy_value
         _buy_units = self.parent_instance.units_bought
         _avg_buy_price = 0 if _buy_value == 0 else _buy_value / _buy_units
         _avg_sell_price = 0 if _sell_value == 0 else _sell_value / _buy_units
+        _buy_order_count = 1 if self.parent_instance.buy_order else 0
+        _sell_order_count = len(self.parent_instance._sales_orders)
+        _sell_order_filled_count = len(self.parent_instance.filled_sales_orders)
 
         log_extras = {
             "run_id": self.parent_instance.parent_controller.run_id,
@@ -78,10 +82,21 @@ class StateTerminated(State):
             "total_gain": _gained,
             "average_buy_price": _avg_buy_price,
             "average_sell_price": _avg_sell_price,
+            "buy_order_count": _buy_order_count,
+            "sell_order_count": _sell_order_count,
+            "sell_order_filled_count": _sell_order_filled_count,
         }
 
         self.log.info(f"Instance summary", state_parameters=log_extras)
         self.log.info(
             f"Instance termination complete at {self.parent_instance.time_manager.now}"
         )
+
+        telemetry_message = log_extras.copy()
+        telemetry_message["symbol"] = str(telemetry_message["symbol"])
+
+        self.parent_instance.telemetry.emit(
+            event="instance terminated", **telemetry_message
+        )
+
         self.parent_instance.handler.close()

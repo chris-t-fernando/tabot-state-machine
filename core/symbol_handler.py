@@ -4,7 +4,7 @@ from .symbol_play import SymbolPlay
 from .play_config import PlayConfig
 from .controller_config import ControllerConfig
 from broker_api import ITradeAPI
-
+from .telemetry import ITelemetry
 
 import logging
 
@@ -23,6 +23,7 @@ class SymbolHandler:
     play_config: PlayConfig
     broker: ITradeAPI
     run_id: str
+    telemetry: ITelemetry
 
     def __init__(
         self,
@@ -31,6 +32,7 @@ class SymbolHandler:
         play_config: PlayConfig,
         broker: ITradeAPI,
         run_id: str,
+        telemetry: ITelemetry,
     ) -> None:
         self._symbols = symbols
         self._ta_algos = set()
@@ -40,6 +42,7 @@ class SymbolHandler:
         self.play_config = play_config
         self.broker = broker
         self.run_id = run_id
+        self.telemetry = telemetry
 
     def __repr__(self) -> str:
         return f"SymbolGroup {self.play_config.name} ({len(self._symbols)} symbols)"
@@ -69,6 +72,7 @@ class SymbolHandler:
                 broker=self.broker,
                 time_manager=self.time_manager,
                 run_id=self.run_id,
+                telemetry=self.telemetry,
             )
             self._symbol_plays.add(_new_controller)
             _new_controller.start()

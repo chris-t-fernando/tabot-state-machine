@@ -43,6 +43,9 @@ class Instance(ABC):
         log_group = "tabot-state-machine"
         unique_id = self._generate_id()
         self.id = f"{self.symbol_str}-{self.config.name}-{unique_id}"
+        self.telemetry = self.parent_controller.telemetry
+
+        # logging insanity
         instance_log = logging.getLogger(self.id)
         # instance_log.propagate = False
         format_str = "%(levelname)%(message)"

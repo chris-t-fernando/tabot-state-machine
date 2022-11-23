@@ -17,6 +17,6 @@ from .play_orchestrator import PlayOrchestrator
 from .play_config import PlayConfig
 from .weather import IWeatherReader, StubWeather
 from .ita import ITA
-from .constants import RT_BACKTEST, RT_PAPER, RT_REAL
+from .constants import RT_BACKTEST, RT_PAPER, RT_REAL, RT_DICT
 
 from .exceptions import *
