@@ -87,7 +87,7 @@ class StateTerminated(State):
             "sell_order_filled_count": _sell_order_filled_count,
         }
 
-        self.log.info(f"Instance summary", state_parameters=log_extras)
+        self.log.log(51, f"Instance summary", state_parameters=log_extras)
         self.log.info(
             f"Instance termination complete at {self.parent_instance.time_manager.now}"
         )

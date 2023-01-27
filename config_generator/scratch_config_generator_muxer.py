@@ -38,40 +38,49 @@ defaults = {
     "config_object": "MacdPlayConfig",
     "check_sma": False,
     "sma_comparison_period": 21,
+    # "algos": ["MacdTA", "SMA"]
 }
 
-out_list = []
+mux_keys = {}
+for k, v in defaults.items():
+    edit_key = input(
+        f"{k} defaults to {v}. Enter number of values to mux, or enter to skip this key:\t\t"
+    )
 
-while True:
-    out = defaults.copy()
-    out["algos"] = ["MacdTA", "SMA"]
+    if edit_key:
+        value_count = int(edit_key)
 
-    name = "play-"
-    for k, v in defaults.items():
-        parameter = input(f"Enter value for {k} (default: {v}):\t")
-        if len(parameter) > 0:
-            name += f"{k}={v}"
-            out[k] = do_cast(v, parameter)
+        done = 1
+        mux_keys[k] = []
+        while done <= value_count:
+            this_value = input(f"Enter value #{done} for {k}:\t\t")
+            this_value_cast = do_cast(v, this_value)
+            mux_keys[k].append(this_value_cast)
+            done += 1
 
-    out["name"] = name
-    out_list.append(out)
-    if input("Another combination? (default yes, n to quit):\t") == "n":
-        break
+configs = []
+for perm_key, perm_values in mux_keys.items():
+    new_config = defaults.copy()
+    for v in perm_values:
 
-# TODO this is too hard for now
-# check that there aren't any duplicate plays
-# set_config = set(out_list)
-# if len(set_config) != out_list:
-#    # there is at least one duplicate
-#    print("Invalid config - found a duplicate")
+        configs.append(new_config)
+
+# I think it is something like
+# enter this key
+# copy list of keys
+# pop this key from list of keys
+# for values in this key
+#   for keys in remaining keys
+#      for values in remaining keys
+#          mux
 
 
-# check that there aren't any duplicate names
-for config in out_list:
-    count = 0
-    for compare_config in out_list:
-        if compare_config["name"] == config["name"]:
-            count += 1
-
-    if count > 1:
-        print(f"Found duplicate name: {compare_config['name']}")
+"""
+buy timeout intervals           1       2       3
+take_profit_risk_multiplier     1.25    1.5     1.75
+take_profit_pct_to_sell         0.25    0.5     0.75    1
+stop_loss_trigger_pct           0.95    0.96    0.97    0.98    0.99    0.995
+stop_loss_hold_intervals        0       1       2
+check_sma                       True    False
+sma_comparison_period           7       14      21      28      35
+"""
