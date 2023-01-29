@@ -34,14 +34,23 @@ config_parameters = {
     "check_sma": [True, False],
 }
 
-"""config_parameters = {
-    "take_profit_risk_multiplier": [1.5, 1.75],
-    "stop_loss_trigger_pct": [0.95, 0.99],
-    "check_sma": [True, False],
+# config_parameters = {
+#    "take_profit_risk_multiplier": [1.5],
+#    "stop_loss_trigger_pct": [0.99],
+#    "check_sma": [True],
+#    "buy_timeout_intervals": [2],
+#    "stop_loss_hold_intervals": [1],
+#    "take_profit_pct_to_sell": [0.5],
+# }
+
+config_parameters = {
     "buy_timeout_intervals": [2],
-    "stop_loss_hold_intervals": [1],
-    "take_profit_pct_to_sell": [0.5],
-}"""
+    "take_profit_risk_multiplier": [1.5, 1.75],
+    "take_profit_pct_to_sell": [0.5, 0.75, 1],
+    "stop_loss_trigger_pct": [0.95, 0.97, 0.99],
+    "stop_loss_hold_intervals": [0, 1],
+    "check_sma": [True],
+}
 
 
 # grab all the lists of different config values we want to generate
@@ -87,4 +96,22 @@ zz = s3_handle.put(
 zz = s3_handle.put(
     "/tabot/play_library/paper/crypto_stable/choppy", json.dumps(generated_configs)
 )
+
+s3_handle.put(
+    "/tabot/play_library/paper/symbol_categories",
+    json.dumps(["crypto_stable", "crypto_alt"]),
+)
+s3_handle.put(
+    "/tabot/play_library/paper/market_conditions",
+    json.dumps(["bull", "sideways", "choppy", "bear"]),
+)
+s3_handle.put(
+    "/tabot/play_library/paper/crypto_alt/symbols",
+    json.dumps(["SOL-USD"]),
+)
+s3_handle.put(
+    "/tabot/play_library/paper/crypto_stable/symbols",
+    json.dumps(["XRP-USD"]),
+)
+
 print("bana")

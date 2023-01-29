@@ -85,11 +85,16 @@ class StubWeather(IWeatherReader):
     def __init__(self, tm: ITimeManager):
         self.__iteration_count = 0
         self.__conditions = ["choppy", "bull", "bear"]
+        self.__conditions = ["bull"]
+        self.condition_count = len(self.__conditions)
         self._tm = tm
 
     def get_all(self) -> dict[str, WeatherResult]:
         self.__iteration_count += 1
-        condition = self.__conditions[math.floor(self.__iteration_count / 1000 % 3)]
+
+        condition = self.__conditions[
+            math.floor(self.__iteration_count / 1000 % self.condition_count)
+        ]
         return StubWeatherResult(condition).get_all()
 
     def get_one(self, category: str) -> WeatherResult:

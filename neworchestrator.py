@@ -41,5 +41,6 @@ po.start()
 
 while not po.eof:
     po.run()
+    print(f"Run {str(po)} finished processing records for {po.now}")
     po.sleep()
-print("got to end")
+print(f"got to end of run ID {str(po)}")

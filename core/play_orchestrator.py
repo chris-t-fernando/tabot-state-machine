@@ -69,7 +69,7 @@ class PlayOrchestrator:
         self.store = store
         self.strategy_handler = strategy_handler
         self.run_type = run_type
-        self.telemetry = Sqs(store)
+        self.telemetry = Sqs(store, run_type)
 
         # set up play library from store
         self.play_library = PlayLibrary(store=store, strategy_handler=strategy_handler)

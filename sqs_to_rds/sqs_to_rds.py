@@ -98,9 +98,13 @@ plays_sql = "insert into play_orchestrators (play_id, run_type, start_time_local
 instances_sql = "insert into instance_results (instance_id, average_buy_price, average_sell_price, bought_value, buy_order_count, play_config_name, run_id, sell_order_count, sell_order_filled_count, sold_value, symbol, symbol_group, total_gain, units, weather_condition) VALUES (%s, %s, %s, %s, %s,%s, %s, %s, %s,%s, %s, %s, %s, %s, %s)"
 
 while True:
+    last = time.time()
     messages = sqs_client.receive_message(
         QueueUrl=sqs_queue_url, MaxNumberOfMessages=10
     )
+    print(f"SQS recv {time.time() - last} seconds")
+    last = time.time()
+
     try:
         messages["Messages"]
     except KeyError:
@@ -145,15 +149,24 @@ while True:
                     )
                 )
                 # insert_instance_terminated(**body_json)
+        print(f"Iterated json for {time.time() - last} seconds")
+        last = time.time()
 
         if plays:
             if not do_insert(plays, plays_sql):
                 print("Insert failure!")
+            print(f"Plays insert for {time.time() - last} seconds")
+            last = time.time()
         if instances:
             if not do_insert(instances, instances_sql):
                 print("Insert failure!")
+            print(f"Instances insert for {time.time() - last} seconds")
+            last = time.time()
 
+        last = time.time()
         mydb.commit()
+        print(f"Commit ran for {time.time() - last} seconds")
+
         sqs_client.delete_message_batch(
             QueueUrl=sqs_queue_url,
             Entries=[
@@ -161,5 +174,6 @@ while True:
                 for d in messages["Messages"]
             ],
         )
+        print(f"SQS clear ran for {time.time() - last} seconds")
         print(f"Committed {len(plays)} plays and {len(instances)} instances")
     # time.sleep(2)

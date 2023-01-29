@@ -85,9 +85,15 @@ class StateTerminated(State):
             "buy_order_count": _buy_order_count,
             "sell_order_count": _sell_order_count,
             "sell_order_filled_count": _sell_order_filled_count,
+            "instance_id": self.parent_instance.id,
         }
 
-        self.log.log(51, f"Instance summary", state_parameters=log_extras)
+        if _sell_order_count > 0:
+            log_level = 51
+        else:
+            log_level = 10
+        self.log.log(log_level, f"Instance summary", state_parameters=log_extras)
+
         self.log.info(
             f"Instance termination complete at {self.parent_instance.time_manager.now}"
         )
@@ -99,4 +105,4 @@ class StateTerminated(State):
             event="instance terminated", **telemetry_message
         )
 
-        self.parent_instance.handler.close()
+        # self.parent_instance.handler.close()

@@ -4,6 +4,7 @@ import boto3
 import botocore
 import random
 import json
+from .constants import RT_BACKTEST, RT_PAPER, RT_REAL, RT_DICT
 
 
 class ITelemetry(ABC):
@@ -20,7 +21,8 @@ class Sqs(ITelemetry):
     _sqs_handle: any
     _sqs_message_group_id: int
 
-    def __init__(self, store: parameter_store.IParameterStore):
+    def __init__(self, store: parameter_store.IParameterStore, run_type: int):
+        # TODO something clever with run_type and queues
         self._sqs_url = store.get("/tabot/telemetry/queue/backtest")
         self._sqs_handle = boto3.client("sqs")
         self._sqs_message_group_id = str(random.randint(1000, 9999))

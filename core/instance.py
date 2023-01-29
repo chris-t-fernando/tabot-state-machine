@@ -18,6 +18,23 @@ import logging
 
 log = logging.getLogger(__name__)
 
+# logging insanity
+instance_log = logging.getLogger("cloudwatch_messages")
+# instance_log.propagate = False
+format_str = "%(levelname)%(message)"
+formatter = jsonlogger.JsonFormatter(format_str)
+handler = CloudWatchLogsHandler(
+    log_group_name="tabot",
+    log_stream_name="instances",
+    buffer_duration=10000,
+    batch_count=1000,
+)
+handler.setFormatter(formatter)
+instance_log.setLevel(51)
+instance_log.addHandler(handler)
+
+instances_log = ShonkyLog(instance_log)
+
 
 class Instance(ABC):
     _state: State
@@ -44,7 +61,7 @@ class Instance(ABC):
         unique_id = self._generate_id()
         self.id = f"{self.symbol_str}-{self.config.name}-{unique_id}"
         self.telemetry = self.parent_controller.telemetry
-
+        """
         # logging insanity
         instance_log = logging.getLogger(self.id)
         # instance_log.propagate = False
@@ -61,6 +78,8 @@ class Instance(ABC):
         instance_log.addHandler(self.handler)
 
         self.log = ShonkyLog(instance_log)
+        """
+        self.log = instances_log
 
         if state == None:
             self._state = play_controller.play_config.state_waiting(

@@ -107,6 +107,7 @@ class StateTakingProfit(State):
         elif sale_status == "cancelled":
             # something happened - what do we do?
             terminated_state = self.controller.play_config.state_terminated
+            taking_profit_state = self.controller.play_config.state_taking_profit
             log_extras = {
                 "held_units": self.parent_instance.units_held,
                 "next_state": taking_profit_state.__name__,
