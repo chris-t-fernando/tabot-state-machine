@@ -10,18 +10,17 @@ from multiprocessing import Process
 # pass per read, but whatever
 
 
-def do_insert(mycursor, values_list, sql_string):
-    try:
-        mycursor.executemany(sql_string, values_list)
-    except mysql.connector.IntegrityError as e:
-        if "Duplicate entry" not in e.msg:
-            raise
-        return True
-    else:
-        return True
+def process_queue(proc_name):
+    def do_insert(mycursor, values_list, sql_string):
+        try:
+            mycursor.executemany(sql_string, values_list)
+        except mysql.connector.IntegrityError as e:
+            if "Duplicate entry" not in e.msg:
+                raise
+            return True
+        else:
+            return True
 
-
-def process_queue():
     store = Ssm()
 
     sqs_client = boto3.client("sqs")
@@ -53,10 +52,12 @@ def process_queue():
     # handles = []
     queue = sqs.Queue(store.get("/tabot/telemetry/queue/backtest"))
 
+    print(f"{proc_name}: Finished bootstrap, starting read...")
     while True:
         last = time.time()
         messages = sqs_client.receive_message(
-            QueueUrl=sqs_queue_url, MaxNumberOfMessages=10
+            QueueUrl=sqs_queue_url,
+            MaxNumberOfMessages=10,
         )
         # print(f"SQS recv {time.time() - last} seconds")
         last = time.time()
@@ -66,41 +67,9 @@ def process_queue():
         except KeyError:
             # nothing to do, so do the inserts and commit, and then sleep for 30 seconds
             # print("nothing to do, so doing commmit")
-            if bulk_plays:
-                if not do_insert(mycursor, bulk_plays, plays_sql):
-                    print("Insert failure!")
-                # print(f"Plays insert for {time.time() - last} seconds")
-                last = time.time()
-            if bulk_instances:
-                if not do_insert(mycursor, bulk_instances, instances_sql):
-                    print("Insert failure!")
-                # print(f"Instances insert for {time.time() - last} seconds")
-                last = time.time()
 
-            if bulk_handles:
-                while len(bulk_handles) > 0:
-                    trim = 10 if len(bulk_handles) > 10 else len(bulk_handles)
-                    these_handles = bulk_handles[:10]
-                    sqs_client.delete_message_batch(
-                        QueueUrl=sqs_queue_url,
-                        Entries=these_handles,
-                    )
-                    # print(f"SQS clear ran for {time.time() - last} seconds")
-                    bulk_handles = bulk_handles[10:]
-
-                last = time.time()
-                mydb.commit()
-                # print(f"Commit ran for {time.time() - last} seconds")
-
-            print(
-                f"Committed {len(bulk_plays)} plays and {len(bulk_instances)} instances"
-            )
-            bulk_handles = []
-            bulk_instances = []
-            bulk_plays = []
-
-            time.sleep(1)
-
+            # time.sleep(1)
+            ...
         else:
             # plays = []
             # instances = []
@@ -151,6 +120,39 @@ def process_queue():
                 {"Id": d["MessageId"], "ReceiptHandle": d["ReceiptHandle"]}
                 for d in messages["Messages"]
             ]
+
+            if bulk_plays:
+                if not do_insert(mycursor, bulk_plays, plays_sql):
+                    print("Insert failure!")
+                # print(f"Plays insert for {time.time() - last} seconds")
+                last = time.time()
+            if bulk_instances:
+                if not do_insert(mycursor, bulk_instances, instances_sql):
+                    print("Insert failure!")
+                # print(f"Instances insert for {time.time() - last} seconds")
+                last = time.time()
+
+            if bulk_handles:
+                while len(bulk_handles) > 0:
+                    trim = 10 if len(bulk_handles) > 10 else len(bulk_handles)
+                    these_handles = bulk_handles[:10]
+                    sqs_client.delete_message_batch(
+                        QueueUrl=sqs_queue_url,
+                        Entries=these_handles,
+                    )
+                    # print(f"SQS clear ran for {time.time() - last} seconds")
+                    bulk_handles = bulk_handles[10:]
+
+                last = time.time()
+                mydb.commit()
+                # print(f"Commit ran for {time.time() - last} seconds")
+
+            print(
+                f"{proc_name}: Committed {len(bulk_plays)} plays and {len(bulk_instances)} instances"
+            )
+            bulk_handles = []
+            bulk_instances = []
+            bulk_plays = []
             # print(
             #    f"Queued {len(messages['Messages'])} messages ({play_count} plays and {instance_count} instances)"
             # )
@@ -160,10 +162,11 @@ def process_queue():
 
 if __name__ == "__main__":  # confirms that the code is under main function
     procs = []
-    for z in range(20):
-        proc = Process(target=process_queue)
+    for z in range(3):
+        proc = Process(target=process_queue, args=(z,))
         procs.append(proc)
         proc.start()
+        time.sleep(1)
 
     for proc in procs:
         proc.join()
